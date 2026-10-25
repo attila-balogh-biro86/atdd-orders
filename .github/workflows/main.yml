@@ -1,0 +1,80 @@
+# Trunk pipeline: the same executable spec verifies every environment the artifact passes through.
+#   build → spec (embedded) → staging deploy → spec (staging) + perf SLO → [approval] → prod deploy → @smoke (prod)
+name: Main
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B test
+
+  acceptance:
+    needs: build
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      target: embedded
+      with_holdout: true
+      label: main-embedded
+    secrets: inherit
+
+  staging:
+    needs: acceptance
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: staging
+      app_name: orders-staging
+    secrets: inherit
+
+  acceptance-staging:
+    needs: staging
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      target: remote
+      base_url: ${{ needs.staging.outputs.url }}
+      label: staging
+
+  performance-staging:
+    name: SLO check (k6, thresholds from specs/quality/slo.json)
+    needs: staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: grafana/setup-k6-action@v1
+      - run: k6 run -e BASE_URL="${{ needs.staging.outputs.url }}" perf/orders-load.js
+
+  production:
+    needs: [acceptance-staging, performance-staging]
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: production        # protected environment: required reviewers
+      app_name: orders-prod
+      build: false                   # promote the exact image verified in staging
+    secrets: inherit
+
+  smoke-production:
+    needs: production
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      target: remote
+      base_url: ${{ needs.production.outputs.url }}
+      tags: '@smoke'
+      label: production-smoke

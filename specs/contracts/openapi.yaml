@@ -1,0 +1,106 @@
+openapi: 3.0.3
+info:
+  title: Orders Service
+  version: 1.0.0
+  description: >
+    Contract layer of the executable specification. Locked like the feature files:
+    changes go through a spec PR. CI lints it and fuzzes the running service against it.
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/customers:
+    post:
+      operationId: registerCustomer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterCustomerRequest' }
+      responses:
+        '201':
+          description: Customer registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Customer' }
+        '400':
+          description: Invalid request
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/orders:
+    post:
+      operationId: placeOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PlaceOrderRequest' }
+      responses:
+        '201':
+          description: Order placed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '400':
+          description: Invalid order (REQ-ORD-013, REQ-ORD-014)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '404':
+          description: Unknown customer (REQ-ORD-013)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+  /api/orders/{id}:
+    get:
+      operationId: getOrder
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Order
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404':
+          description: Not found
+components:
+  schemas:
+    Membership:
+      type: string
+      enum: [STANDARD, LOYALTY]
+    RegisterCustomerRequest:
+      type: object
+      required: [membership]
+      properties:
+        membership: { $ref: '#/components/schemas/Membership' }
+    Customer:
+      type: object
+      required: [id, membership]
+      properties:
+        id: { type: string, format: uuid }
+        membership: { $ref: '#/components/schemas/Membership' }
+    PlaceOrderRequest:
+      type: object
+      required: [customerId, total]
+      properties:
+        customerId: { type: string, format: uuid }
+        total: { type: number, description: EUR, at most 2 decimals }
+    Order:
+      type: object
+      required: [id, customerId, total, payable]
+      properties:
+        id: { type: string, format: uuid }
+        customerId: { type: string, format: uuid }
+        total: { type: number }
+        payable: { type: number, description: Amount after discounts (REQ-ORD-012) }
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }

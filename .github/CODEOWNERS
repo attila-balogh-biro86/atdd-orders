@@ -1,0 +1,20 @@
+# Branch protection must have "Require review from Code Owners" enabled for this to bite.
+# Replace the team handles with your own.
+
+# Default: any developer
+*                                   @your-org/developers
+
+# Executable specification: product + architecture sign-off
+/specs/features/                    @your-org/product-owners @your-org/architects
+/specs/contracts/                   @your-org/architects
+/specs/quality/                     @your-org/architects
+/acceptance/                        @your-org/qa-engineers @your-org/architects
+/delivery/pending-requirements.txt  @your-org/product-owners
+
+# Delivery governance: platform team only
+/.github/                           @your-org/platform
+/.claude/                           @your-org/platform
+/CLAUDE.md                          @your-org/platform
+/ci/                                @your-org/platform
+/scripts/                           @your-org/platform
+/pom.xml                            @your-org/platform

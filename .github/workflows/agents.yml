@@ -1,0 +1,97 @@
+# Claude Code running inside GitHub. Humans decide WHEN an agent acts (labels, mentions);
+# the repo's CLAUDE.md, .claude/ agents, commands and hooks decide HOW; the PR pipeline decides IF it is accepted.
+#
+#   label 'agent:spec' on a requirement issue  → spec-author + acceptance-engineer open a spec PR
+#   label 'agent:implement' on the issue       → implementer opens an impl PR (after the spec PR merged)
+#   every impl/* PR                            → independent spec-conformance review comment
+#   '@claude …' in an issue/PR comment          → ad-hoc help, implementer role (spec paths locked)
+name: Agents
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  spec-draft:
+    if: github.event_name == 'issues' && github.event.label.name == 'agent:spec'
+    runs-on: ubuntu-latest
+    env:
+      ATDD_ROLE: spec
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            /spec ${{ github.event.issue.number }}
+            You are running unattended in CI. Do not wait for answers: if example mapping produces open
+            questions that change behaviour, post them as a comment on issue #${{ github.event.issue.number }},
+            label the issue 'needs-clarification', and stop without opening a PR.
+          claude_args: --max-turns 60
+
+  implement:
+    if: github.event_name == 'issues' && github.event.label.name == 'agent:implement'
+    runs-on: ubuntu-latest
+    env:
+      ATDD_ROLE: implement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Read issue #${{ github.event.issue.number }} with `gh issue view`. It names a requirement ID (REQ-…).
+            Run `/implement <that REQ-ID>`. If the requirement is not in delivery/pending-requirements.txt,
+            comment on the issue that a spec PR must be merged first, and stop.
+          claude_args: --max-turns 80
+
+  conformance-review:
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'impl/')
+    runs-on: ubuntu-latest
+    env:
+      ATDD_ROLE: implement
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            Use the spec-conformance-reviewer subagent on PR #${{ github.event.pull_request.number }}
+            (diff: `git diff origin/${{ github.base_ref }}...HEAD`). Post its verdict and findings as a single
+            PR comment with `gh pr comment`. Do not push commits.
+          claude_args: --max-turns 40
+
+  mention:
+    if: |
+      (github.event_name == 'issue_comment' || github.event_name == 'pull_request_review_comment') &&
+      contains(github.event.comment.body, '@claude')
+    runs-on: ubuntu-latest
+    env:
+      ATDD_ROLE: implement
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: maven }
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: --max-turns 40

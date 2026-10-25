@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.0</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.example</groupId>
+  <artifactId>orders-service</artifactId>
+  <version>0.1.0-SNAPSHOT</version>
+  <name>orders-service</name>
+  <description>Executable-specification ATDD reference project for an agentic SDLC</description>
+
+  <properties>
+    <java.version>21</java.version>
+    <cucumber.version>7.20.1</cucumber.version>
+
+    <!-- Acceptance-suite knobs (override with -D... or via scripts/acceptance.sh) -->
+    <acceptance.target>embedded</acceptance.target>   <!-- embedded | remote -->
+    <acceptance.baseUrl>http://localhost:8080</acceptance.baseUrl>
+    <acceptance.tags>not @manual</acceptance.tags>
+    <acceptance.features>specs/features</acceptance.features>
+    <acceptance.report>target/cucumber/report</acceptance.report>
+    <skipUTs>false</skipUTs>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.cucumber</groupId>
+        <artifactId>cucumber-bom</artifactId>
+        <version>${cucumber.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- ===== Production ===== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <!-- ===== Unit / property / architecture tests ===== -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>net.jqwik</groupId>
+      <artifactId>jqwik</artifactId>
+      <version>1.9.2</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.tngtech.archunit</groupId>
+      <artifactId>archunit-junit5</artifactId>
+      <version>1.3.0</version>
+      <scope>test</scope>
+    </dependency>
+
+    <!-- ===== Executable specification (acceptance) ===== -->
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-java</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-spring</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.cucumber</groupId>
+      <artifactId>cucumber-junit-platform-engine</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-suite</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!-- acceptance/java is a separate, governed test source root -->
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
+        <version>3.6.0</version>
+        <executions>
+          <execution>
+            <id>add-acceptance-sources</id>
+            <phase>generate-test-sources</phase>
+            <goals><goal>add-test-source</goal></goals>
+            <configuration>
+              <sources><source>acceptance/java</source></sources>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Unit, property and architecture tests: fast, run by `mvn test` -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <skipTests>${skipUTs}</skipTests>
+          <excludes>
+            <exclude>**/AcceptanceSuite.java</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
+
+      <!-- Executable specification: run by `mvn verify` -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <includes>
+            <include>**/AcceptanceSuite.java</include>
+          </includes>
+          <systemPropertyVariables>
+            <acceptance.target>${acceptance.target}</acceptance.target>
+            <acceptance.baseUrl>${acceptance.baseUrl}</acceptance.baseUrl>
+            <cucumber.filter.tags>${acceptance.tags}</cucumber.filter.tags>
+            <cucumber.features>${acceptance.features}</cucumber.features>
+            <cucumber.plugin>pretty, summary, html:${acceptance.report}.html, json:${acceptance.report}.json, junit:${acceptance.report}.xml</cucumber.plugin>
+          </systemPropertyVariables>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!-- Mutation testing: are the tests actually constraining the domain logic? -->
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <version>1.17.0</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>1.2.1</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <targetClasses>
+            <param>com.example.orders.domain.*</param>
+          </targetClasses>
+          <targetTests>
+            <param>com.example.orders.domain.*</param>
+          </targetTests>
+          <mutationThreshold>80</mutationThreshold>
+          <outputFormats>
+            <param>HTML</param>
+            <param>XML</param>
+          </outputFormats>
+          <timestampedReports>false</timestampedReports>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

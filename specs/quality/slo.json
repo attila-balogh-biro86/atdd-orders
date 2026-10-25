@@ -1,0 +1,9 @@
+{
+  "_comment": "Quality layer of the executable spec. Consumed by perf/orders-load.js (k6) against staging. Locked: change via spec PR.",
+  "placeOrder": {
+    "p95_ms": 300,
+    "p99_ms": 800,
+    "error_rate_max": 0.01,
+    "load": { "vus": 20, "duration": "60s" }
+  }
+}

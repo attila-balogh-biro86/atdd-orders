@@ -1,0 +1,8 @@
+# Requirements that are SPECIFIED (feature files merged) but NOT YET IMPLEMENTED.
+# The pipeline excludes these tags from the acceptance gate on main.
+#
+# Rules enforced by ci/guard.sh:
+#   - Spec PRs may ADD lines here (and must prove the new scenarios are red).
+#   - Implementation PRs may only REMOVE lines (and the scenarios must then pass).
+#   - Nobody else may add lines: that would be a way to silently skip a failing spec.
+REQ-ORD-014

@@ -1,0 +1,43 @@
+name: Requirement
+description: A business rule to specify (spec PR) and then implement (implementation PR)
+title: "[REQ-XXX-NNN] "
+labels: [requirement]
+body:
+  - type: input
+    id: req
+    attributes:
+      label: Requirement ID
+      description: Next free ID in the area, e.g. REQ-ORD-015
+    validations:
+      required: true
+  - type: textarea
+    id: story
+    attributes:
+      label: Story
+      placeholder: As a … I want … so that …
+    validations:
+      required: true
+  - type: textarea
+    id: rules
+    attributes:
+      label: Rules
+      description: One sentence per business rule
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Known examples
+      description: Concrete inputs and expected outcomes, especially boundaries. Rough is fine; example mapping refines them.
+      placeholder: |
+        loyalty, 100.00 → 100.00
+        loyalty, 100.01 → 90.01
+  - type: textarea
+    id: questions
+    attributes:
+      label: Open questions
+  - type: markdown
+    attributes:
+      value: |
+        **Next:** add the `agent:spec` label to let Claude draft the spec PR, or run `/spec <issue>` locally
+        with `ATDD_ROLE=spec claude`. After the spec PR is merged, add `agent:implement`.

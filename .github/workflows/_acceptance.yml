@@ -1,0 +1,97 @@
+# Reusable: run the executable specification against a target and publish traceability.
+name: _acceptance
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        description: embedded | remote
+        type: string
+        default: embedded
+      base_url:
+        type: string
+        default: ''
+      only_reqs:
+        description: Comma-separated requirement IDs to run exclusively (ignores the pending list)
+        type: string
+        default: ''
+      tags:
+        description: Extra tag filter combined with the pending-list exclusion, e.g. '@smoke'
+        type: string
+        default: ''
+      expect:
+        description: green | red
+        type: string
+        default: green
+      with_holdout:
+        type: boolean
+        default: false
+      label:
+        description: Name shown in the summary and artifact
+        type: string
+        required: true
+
+jobs:
+  run:
+    name: spec (${{ inputs.label }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # Holdout scenarios: extra examples kept in a private repo the implementer (human or agent)
+      # never sees. They reuse the same step language. Skipped if HOLDOUT_REPO is not configured.
+      - name: Fetch holdout scenarios
+        if: inputs.with_holdout && vars.HOLDOUT_REPO != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.HOLDOUT_REPO }}
+          token: ${{ secrets.HOLDOUT_TOKEN }}
+          path: _holdout
+      - name: Mount holdout scenarios
+        if: inputs.with_holdout && vars.HOLDOUT_REPO != ''
+        run: |
+          mkdir -p specs/features/_holdout
+          cp -r _holdout/features/. specs/features/_holdout/
+          echo "Mounted $(find specs/features/_holdout -name '*.feature' | wc -l) holdout feature file(s)"
+
+      - name: Run executable specification
+        id: run
+        env:
+          TARGET: ${{ inputs.target }}
+          BASE_URL: ${{ inputs.base_url }}
+          ONLY_REQS: ${{ inputs.only_reqs }}
+          EXTRA_TAGS: ${{ inputs.tags }}
+        run: |
+          set +e
+          if [[ -n "$ONLY_REQS" ]]; then
+            export ONLY="$(echo "$ONLY_REQS" | sed 's/^/@/; s/,/ or @/g')"
+          fi
+          [[ -n "$EXTRA_TAGS" ]] && export TAGS="$EXTRA_TAGS"
+          scripts/acceptance.sh "$TARGET" "${BASE_URL:-http://localhost:8080}"
+          echo "exit=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Traceability report
+        if: always()
+        run: python3 ci/traceability.py target/cucumber/report.json "${{ inputs.label }}" || true
+
+      - name: Expect green
+        if: inputs.expect == 'green'
+        run: |
+          [[ "${{ steps.run.outputs.exit }}" == "0" ]] || { echo "::error::Executable specification failed (${{ inputs.label }})"; exit 1; }
+
+      - name: Expect red for the right reason
+        if: inputs.expect == 'red'
+        run: python3 ci/red_check.py target/cucumber/report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spec-report-${{ inputs.label }}
+          path: target/cucumber/
+          if-no-files-found: ignore

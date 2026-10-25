@@ -1,0 +1,71 @@
+# Reusable: build the image once, deploy to an Azure Container App, wait until healthy.
+name: _deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: GitHub environment (preview | staging | production); gates approvals and holds vars
+        type: string
+        required: true
+      app_name:
+        type: string
+        required: true
+      build:
+        description: Build and push the image (false = promote an existing tag)
+        type: boolean
+        default: true
+    outputs:
+      url:
+        value: ${{ jobs.deploy.outputs.url }}
+      image:
+        value: ${{ jobs.deploy.outputs.image }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.deploy.outputs.url }}
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image coordinates
+        id: meta
+        run: echo "image=${{ vars.ACR_NAME }}.azurecr.io/orders-service:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: actions/setup-java@v4
+        if: inputs.build
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build and push image (skipped if this commit's image already exists)
+        if: inputs.build
+        run: |
+          if az acr repository show --name "${{ vars.ACR_NAME }}" --image "orders-service:${{ github.sha }}" >/dev/null 2>&1; then
+            echo "Image exists, reusing it (build once, promote everywhere)"; exit 0
+          fi
+          mvn -B -q package -DskipTests
+          az acr build --registry "${{ vars.ACR_NAME }}" --image "orders-service:${{ github.sha }}" .
+
+      - name: Deploy container app
+        id: deploy
+        run: |
+          ci/deploy-containerapp.sh \
+            "${{ inputs.app_name }}" "${{ steps.meta.outputs.image }}" \
+            "${{ vars.AZURE_RESOURCE_GROUP }}" "${{ vars.CONTAINERAPPS_ENV }}" "${{ vars.ACR_NAME }}"

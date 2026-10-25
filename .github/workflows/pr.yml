@@ -1,0 +1,151 @@
+# Pull-request pipeline. One workflow, two shapes, decided by ci/guard.sh:
+#   spec PR  → guard → build → contract lint → prove new scenarios RED → existing spec still green
+#   impl PR  → guard → build → spec GREEN (+ holdout) → mutation → preview deploy → spec GREEN on preview → fuzz
+# Branch protection requires only the final "PR gate" check.
+name: PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled, ready_for_review]
+
+concurrency:
+  group: pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+  pull-requests: read
+
+jobs:
+  guard:
+    name: Path guard
+    runs-on: ubuntu-latest
+    outputs:
+      kind: ${{ steps.guard.outputs.kind }}
+      added: ${{ steps.guard.outputs.added }}
+      removed: ${{ steps.guard.outputs.removed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: guard
+        env:
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: ci/guard.sh "origin/${{ github.base_ref }}"
+
+  build:
+    name: Build, unit, property & architecture tests
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-reports
+          path: target/surefire-reports/
+          if-no-files-found: ignore
+
+  contract-lint:
+    name: Contract lint
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npx --yes @redocly/cli@1 lint specs/contracts/openapi.yaml
+
+  # ---------- spec PRs ----------
+  red-check:
+    name: New scenarios are red
+    needs: [guard, build]
+    if: needs.guard.outputs.kind == 'spec' && needs.guard.outputs.added != ''
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      only_reqs: ${{ needs.guard.outputs.added }}
+      expect: red
+      label: red-check
+
+  # ---------- every PR that touches spec or code ----------
+  acceptance:
+    name: Executable spec (embedded)
+    needs: [guard, build]
+    if: contains(fromJSON('["spec","impl"]'), needs.guard.outputs.kind)
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      target: embedded
+      with_holdout: ${{ needs.guard.outputs.kind == 'impl' }}
+      label: embedded
+    secrets: inherit
+
+  # ---------- implementation PRs ----------
+  mutation:
+    name: Mutation testing
+    needs: [guard, build]
+    if: needs.guard.outputs.kind == 'impl'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: mvn -B test-compile org.pitest:pitest-maven:mutationCoverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mutation-report
+          path: target/pit-reports/
+          if-no-files-found: ignore
+
+  preview:
+    name: Deploy preview
+    needs: [guard, acceptance, mutation]
+    if: needs.guard.outputs.kind == 'impl' && vars.AZURE_CLIENT_ID != ''
+    uses: ./.github/workflows/_deploy.yml
+    with:
+      environment: preview
+      app_name: orders-pr-${{ github.event.pull_request.number }}
+    secrets: inherit
+
+  acceptance-preview:
+    name: Executable spec (preview)
+    needs: preview
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      target: remote
+      base_url: ${{ needs.preview.outputs.url }}
+      label: preview
+
+  contract-fuzz:
+    name: Contract fuzzing (preview)
+    needs: preview
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uvx schemathesis run specs/contracts/openapi.yaml --url "${{ needs.preview.outputs.url }}" --checks all
+
+  # ---------- single required check ----------
+  gate:
+    name: PR gate
+    if: always()
+    needs: [guard, build, contract-lint, red-check, acceptance, mutation, preview, acceptance-preview, contract-fuzz]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required jobs succeeded (skipped is fine)
+        run: |
+          echo '${{ toJSON(needs) }}' | python3 -c '
+          import json, sys
+          needs = json.load(sys.stdin)
+          bad = {k: v["result"] for k, v in needs.items() if v["result"] not in ("success", "skipped")}
+          if bad:
+              print("::error::Failed jobs:", bad); sys.exit(1)
+          print("All gates passed:", {k: v["result"] for k, v in needs.items()})'

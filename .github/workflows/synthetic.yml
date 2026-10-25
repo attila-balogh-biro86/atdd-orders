@@ -1,0 +1,20 @@
+# The spec as production monitoring: @smoke scenarios against prod on a schedule.
+name: Synthetic monitoring
+
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    if: vars.PROD_URL != ''
+    uses: ./.github/workflows/_acceptance.yml
+    with:
+      target: remote
+      base_url: ${{ vars.PROD_URL }}
+      tags: '@smoke'
+      label: synthetic-prod
