@@ -11,6 +11,8 @@ paths:
   /api/customers:
     post:
       operationId: registerCustomer
+      summary: Register a customer
+      security: []
       requestBody:
         required: true
         content:
@@ -30,6 +32,8 @@ paths:
   /api/orders:
     post:
       operationId: placeOrder
+      summary: Place an order
+      security: []
       requestBody:
         required: true
         content:
@@ -54,6 +58,8 @@ paths:
   /api/orders/{id}:
     get:
       operationId: getOrder
+      summary: Get an order
+      security: []
       parameters:
         - name: id
           in: path
@@ -67,6 +73,35 @@ paths:
               schema: { $ref: '#/components/schemas/Order' }
         '404':
           description: Not found
+  /api/orders/{id}/cancel:
+    post:
+      operationId: cancelOrder
+      summary: Cancel an order
+      security: []
+      description: >
+        Cancels a placed order (REQ-ORD-015). The cancelled order has status CANCELLED and
+        payable 0.00. No ownership check is applied; there is no cancellation deadline.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Order cancelled
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+        '404':
+          description: Unknown order (REQ-ORD-015)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '409':
+          description: Order already cancelled (REQ-ORD-015); detail contains "already cancelled"
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 components:
   schemas:
     Membership:
@@ -88,15 +123,20 @@ components:
       required: [customerId, total]
       properties:
         customerId: { type: string, format: uuid }
-        total: { type: number, description: EUR, at most 2 decimals }
+        total: { type: number, description: 'EUR, at most 2 decimals' }
     Order:
       type: object
-      required: [id, customerId, total, payable]
+      required: [id, customerId, total, payable, status]
       properties:
         id: { type: string, format: uuid }
         customerId: { type: string, format: uuid }
         total: { type: number }
-        payable: { type: number, description: Amount after discounts (REQ-ORD-012) }
+        payable: { type: number, description: Amount after discounts (REQ-ORD-012); 0.00 once cancelled (REQ-ORD-015) }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+    OrderStatus:
+      type: string
+      enum: [PLACED, CANCELLED]
+      description: PLACED on creation; CANCELLED after cancellation (REQ-ORD-015)
     Problem:
       type: object
       properties:
