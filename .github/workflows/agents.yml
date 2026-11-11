@@ -41,7 +41,14 @@ jobs:
             You are running unattended in CI. Do not wait for answers: if example mapping produces open
             questions that change behaviour, post them as a comment on issue #${{ github.event.issue.number }},
             label the issue 'needs-clarification', and stop without opening a PR.
-          claude_args: --max-turns 60 --allowedTools "Edit,Write,Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(git switch:*),Bash(git push:*)"
+          claude_args:
+            --max-turns 60
+            --allowedTools "Read,Glob,Grep,Edit,Write,Agent,
+            Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(gh pr create:*),
+            Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(git switch:*),Bash(git checkout:*),
+            Bash(git add:*),Bash(git commit:*),Bash(git push:*),
+            Bash(mvn:*),Bash(scripts/acceptance.sh:*),Bash(scripts/tag-expression.sh),
+            Bash(python3 ci/red_check.py:*),Bash(python3 ci/traceability.py:*)"
 
   implement:
     if: github.event_name == 'issues' && github.event.label.name == 'agent:implement'
@@ -59,7 +66,14 @@ jobs:
             Read issue #${{ github.event.issue.number }} with `gh issue view`. It names a requirement ID (REQ-…).
             Run `/implement <that REQ-ID>`. If the requirement is not in delivery/pending-requirements.txt,
             comment on the issue that a spec PR must be merged first, and stop.
-          claude_args: --max-turns 80
+          claude_args:
+            --max-turns 80
+            --allowedTools "Read,Glob,Grep,Edit,Write,Agent,
+            Bash(gh issue view:*),Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(gh pr create:*),
+            Bash(git status),Bash(git diff:*),Bash(git log:*),Bash(git switch:*),Bash(git checkout:*),
+            Bash(git add:*),Bash(git commit:*),Bash(git push:*),
+            Bash(mvn:*),Bash(scripts/acceptance.sh:*),Bash(scripts/tag-expression.sh),
+            Bash(python3 ci/red_check.py:*),Bash(python3 ci/traceability.py:*)"
 
   conformance-review:
     if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'impl/')
