@@ -41,7 +41,7 @@ jobs:
             You are running unattended in CI. Do not wait for answers: if example mapping produces open
             questions that change behaviour, post them as a comment on issue #${{ github.event.issue.number }},
             label the issue 'needs-clarification', and stop without opening a PR.
-          claude_args: --max-turns 60
+          claude_args: --max-turns 60 --allowedTools "Edit,Write,Bash(gh issue comment:*),Bash(gh issue edit:*),Bash(git switch:*),Bash(git push:*)"
 
   implement:
     if: github.event_name == 'issues' && github.event.label.name == 'agent:implement'
