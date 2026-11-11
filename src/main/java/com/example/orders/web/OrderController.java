@@ -2,6 +2,7 @@ package com.example.orders.web;
 
 import com.example.orders.application.OrderService;
 import com.example.orders.domain.Order;
+import com.example.orders.domain.OrderStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.http.ResponseEntity;
@@ -28,9 +29,10 @@ public class OrderController {
 
     public record PlaceOrderRequest(@NotNull UUID customerId, @NotNull BigDecimal total) {}
 
-    public record OrderResponse(UUID id, UUID customerId, BigDecimal total, BigDecimal payable) {
+    public record OrderResponse(UUID id, UUID customerId, BigDecimal total, BigDecimal payable,
+                                OrderStatus status) {
         static OrderResponse from(Order o) {
-            return new OrderResponse(o.id(), o.customerId(), o.total(), o.payable());
+            return new OrderResponse(o.id(), o.customerId(), o.total(), o.payable(), o.status());
         }
     }
 
@@ -39,6 +41,11 @@ public class OrderController {
         Order order = service.placeOrder(request.customerId(), request.total());
         return ResponseEntity.created(URI.create("/api/orders/" + order.id()))
                 .body(OrderResponse.from(order));
+    }
+
+    @PostMapping("/{id}/cancel")
+    public ResponseEntity<OrderResponse> cancel(@PathVariable UUID id) {
+        return ResponseEntity.ok(OrderResponse.from(service.cancelOrder(id)));
     }
 
     @GetMapping("/{id}")
