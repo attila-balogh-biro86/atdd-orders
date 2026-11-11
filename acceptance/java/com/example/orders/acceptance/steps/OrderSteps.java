@@ -59,4 +59,59 @@ public class OrderSteps {
     public void rejectedUnknownCustomer() {
         orders.assertRejectedAsUnknownCustomer();
     }
+
+    @ParameterType("placed|cancelled")
+    public String orderStatus(String value) {
+        return value;
+    }
+
+    @When("they place an order {string} totalling {amount} EUR")
+    public void theyPlaceANamedOrder(String name, BigDecimal total) {
+        orders.placeNamedOrder(name, total);
+    }
+
+    @When("they cancel the order")
+    public void theyCancelTheOrder() {
+        orders.cancelOrder();
+    }
+
+    @When("they cancel order {string}")
+    public void theyCancelNamedOrder(String name) {
+        orders.cancelNamedOrder(name);
+    }
+
+    @When("they cancel an order that does not exist")
+    public void theyCancelAnUnknownOrder() {
+        orders.cancelUnknownOrder();
+    }
+
+    @When("they look up the order")
+    public void theyLookUpTheOrder() {
+        orders.lookUpOrder();
+    }
+
+    @Then("the order has status {orderStatus}")
+    public void theOrderHasStatus(String status) {
+        orders.assertStatus(status);
+    }
+
+    @Then("order {string} has status {orderStatus}")
+    public void namedOrderHasStatus(String name, String status) {
+        orders.assertNamedOrderStatus(name, status);
+    }
+
+    @Then("order {string} has a payable amount of {amount} EUR")
+    public void namedOrderHasPayable(String name, BigDecimal payable) {
+        orders.assertNamedOrderPayable(name, payable);
+    }
+
+    @Then("the cancellation is rejected because {string}")
+    public void theCancellationIsRejectedBecause(String reason) {
+        orders.assertCancellationRejectedBecause(reason);
+    }
+
+    @Then("the cancellation is rejected because the order is unknown")
+    public void cancellationRejectedUnknownOrder() {
+        orders.assertCancellationRejectedAsUnknownOrder();
+    }
 }

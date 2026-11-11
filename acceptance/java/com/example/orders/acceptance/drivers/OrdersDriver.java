@@ -13,10 +13,31 @@ public interface OrdersDriver {
 
     OrderOutcome placeOrder(UUID customerId, BigDecimal total);
 
+    /** Cancels the given order; a refusal is reported as {@link OrderOutcome.Rejected}, never thrown. */
+    OrderOutcome cancelOrder(UUID orderId);
+
+    /** Fetches the order's current state as the system reports it now. */
+    OrderOutcome lookUpOrder(UUID orderId);
+
     sealed interface OrderOutcome {
-        record Placed(UUID orderId, BigDecimal payable) implements OrderOutcome {}
+
+        /** The system answered with the order's state. {@code status} is null if the system did not report one. */
+        sealed interface Known extends OrderOutcome {
+            UUID orderId();
+            BigDecimal payable();
+            OrderStatus status();
+        }
+
+        /** The order was created. */
+        record Placed(UUID orderId, BigDecimal payable, OrderStatus status) implements Known {}
+
+        /** The system returned an existing order's current state (after a cancellation or a lookup). */
+        record Found(UUID orderId, BigDecimal payable, OrderStatus status) implements Known {}
+
         record Rejected(Reason reason, String detail) implements OrderOutcome {}
     }
 
-    enum Reason { INVALID_ORDER, UNKNOWN_CUSTOMER, OTHER }
+    enum OrderStatus { PLACED, CANCELLED }
+
+    enum Reason { INVALID_ORDER, UNKNOWN_CUSTOMER, UNKNOWN_ORDER, INVALID_STATE, OTHER }
 }
