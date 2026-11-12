@@ -5,6 +5,7 @@ import com.example.orders.domain.CustomerNotFoundException;
 import com.example.orders.domain.DiscountPolicy;
 import com.example.orders.domain.Membership;
 import com.example.orders.domain.Order;
+import com.example.orders.domain.OrderNotFoundException;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -36,6 +37,20 @@ public class OrderService {
         Order order = Order.place(customer, total, discountPolicy);
         orders.put(order.id(), order);
         return order;
+    }
+
+    /**
+     * REQ-ORD-015: cancels the order atomically, so two concurrent cancellations cannot both succeed.
+     *
+     * @throws OrderNotFoundException if no such order exists
+     * @throws com.example.orders.domain.OrderAlreadyCancelledException if it is already cancelled
+     */
+    public Order cancelOrder(UUID id) {
+        Order cancelled = orders.computeIfPresent(id, (key, order) -> order.cancel());
+        if (cancelled == null) {
+            throw new OrderNotFoundException(id);
+        }
+        return cancelled;
     }
 
     public Optional<Order> findOrder(UUID id) {
