@@ -89,6 +89,7 @@ jobs:
       - uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_bots: 'claude'
           prompt: |
             Use the spec-conformance-reviewer subagent on PR #${{ github.event.pull_request.number }}
             (diff: `git diff origin/${{ github.base_ref }}...HEAD`). Post its verdict and findings as a single
