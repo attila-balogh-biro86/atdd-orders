@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spec-Driven Development in the AI Era · Scaler meetup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1E1E1E;
+    --panel: #262626;
+    --panel-2: #2e2e2e;
+    --line: #333333;
+    --line-2: #444444;
+    --muted: #8E8E8E;
+    --muted-2: #5A5A5A;
+    --text: #FFFFFF;
+    --lime: #D0FF00;
+    --lime-soft: #D1FD60;
+    --red: #FF6B5E;
+    --amber: #FFC857;
+    --mono: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #111; color: var(--text);
+    font-family: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+
+  /* ---------- stage: fixed 1280×720 canvas scaled to the window ---------- */
+  #viewport { position: fixed; inset: 0; display: grid; place-items: center; }
+  #stage { width: 1280px; height: 720px; position: relative; transform-origin: center center; }
+  .slide { position: absolute; inset: 0; background: var(--bg); overflow: hidden;
+    padding: 64px 80px 56px; opacity: 0; visibility: hidden; transition: opacity .35s ease; }
+  .slide.active { opacity: 1; visibility: visible; }
+
+  /* ---------- Scaler design language ---------- */
+  .tag { font-family: var(--mono); color: var(--lime); font-size: 15px; letter-spacing: .02em; }
+  .tag::before { content: "< "; } .tag::after { content: " />"; }
+  h1, h2, h3 { margin: 0; font-weight: 700; letter-spacing: -.01em; }
+  h2 { font-size: 40px; line-height: 1.12; margin-top: 8px; }
+  h2 .hl, .hl { color: var(--lime); }
+  p { margin: 0; }
+  .lead { color: #d8d8d8; font-size: 19px; line-height: 1.45; max-width: 1110px; margin-top: 14px; font-weight: 300; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); }
+  .card { position: relative; border-radius: 14px; padding: 18px 20px; background: var(--panel); }
+  /* the gradient cards from the Scaler deck (light grey top-left → background) */
+  .card.grad { background: linear-gradient(162deg, #8f8f8f 0%, #4b4b4b 30%, #262626 62%, #1E1E1E 100%); }
+  .card.grad::after { content: ""; position: absolute; inset: 1px; border-radius: 13px;
+    background: linear-gradient(162deg, rgba(30,30,30,.25), rgba(30,30,30,.92) 45%, #1E1E1E); z-index: 0; }
+  .card.grad > * { position: relative; z-index: 1; }
+  .card h3 { font-size: 19px; margin-bottom: 6px; }
+  .card p { color: #cfcfcf; font-size: 15px; line-height: 1.42; }
+
+  /* small Scaler wordmark, top-right of content slides */
+  .brand { position: absolute; top: 30px; right: 40px; opacity: .9; }
+  /* exact replica of the title-slide wordmark (the "L" is a slash + bar), scaled by --s */
+  .wm { position: relative; width: calc(1171px * var(--s)); height: calc(187px * var(--s)); }
+  .wm-in { position: absolute; left: 0; top: 0; width: 1171px; height: 187px; transform: scale(var(--s)); transform-origin: 0 0; }
+  .wm-in img { position: absolute; }
+  .pageno { position: absolute; bottom: 24px; right: 40px; font-family: var(--mono); color: var(--muted); font-size: 13px; }
+  .pageno b { color: var(--lime); font-weight: 500; }
+  .footer-l { position: absolute; bottom: 24px; left: 80px; font-family: var(--mono); color: var(--muted-2); font-size: 12px; }
+
+  /* lime star-dust dots, like on the Scaler slides */
+  .dust { position: absolute; pointer-events: none; }
+  .dust i { position: absolute; border-radius: 50%; background: var(--lime-soft); box-shadow: 0 0 0 1px #333, 0 0 10px rgba(209,253,96,.35); }
+  .sphere { position: absolute; pointer-events: none; opacity: .55; filter: brightness(.9); }
+
+  /* buttons / chips */
+  .btn { font: 500 14px "Roboto", sans-serif; color: var(--text); background: transparent; border: 1px solid var(--line-2);
+    padding: 8px 14px; border-radius: 999px; cursor: pointer; transition: all .18s; }
+  .btn:hover { border-color: var(--lime); color: var(--lime); }
+  .btn.on { background: var(--lime); color: #111; border-color: var(--lime); }
+  .chip { display: inline-block; font: 500 12px var(--mono); padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line-2); color: #ddd; }
+  .chip.lime { border-color: var(--lime); color: var(--lime); }
+  .chip.red { border-color: var(--red); color: var(--red); }
+
+  pre.code { margin: 0; font: 13.5px/1.55 var(--mono); background: #151515; border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; color: #e6e6e6; white-space: pre; overflow: hidden; }
+  .code .k { color: #c792ea; } .code .s { color: var(--lime-soft); } .code .c { color: #7a7a7a; }
+  .code .a { color: #82aaff; } .code .n { color: var(--amber); } .code .g { color: var(--lime); font-weight: 500; }
+
+  /* nav */
+  #nav { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center;
+    opacity: .0; transition: opacity .25s; z-index: 10; }
+  body:hover #nav { opacity: .85; }
+  #nav button { background: #000a; color: #fff; border: 1px solid #444; border-radius: 999px; width: 34px; height: 34px; cursor: pointer; font-size: 16px; }
+  #nav button:hover { border-color: var(--lime); color: var(--lime); }
+  #progress { position: fixed; left: 0; top: 0; height: 3px; background: var(--lime); transition: width .3s; z-index: 10; }
+
+  /* ---------- slide 1: title ---------- */
+  .title-slide { padding: 0; }
+  .title-slide .wordmark img { position: absolute; }
+  .title-slide .t-wrap { position: absolute; left: 80px; top: 92px; width: 760px; }
+  .title-slide h1 { font-size: 58px; line-height: 1.04; font-weight: 900; margin-top: 18px; }
+  .title-slide .sub { font-size: 22px; color: #d6d6d6; margin-top: 18px; font-weight: 300; line-height: 1.4; }
+  .title-slide .meta { margin-top: 26px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* ---------- slide 2: problems ---------- */
+  .problems { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 30px; }
+  .problems .card { min-height: 150px; }
+  .problems .card .num { font: 500 13px var(--mono); color: var(--lime); margin-bottom: 8px; }
+  .quote { margin-top: 26px; border-left: 3px solid var(--lime); padding: 6px 0 6px 18px; font-size: 21px; font-weight: 300; color: #eee; }
+
+  /* ---------- slide 3: SDLC ---------- */
+  .toggle { display: flex; gap: 8px; margin-top: 18px; }
+  .pipeline { position: relative; display: flex; gap: 0; margin-top: 26px; align-items: stretch; }
+  .stage { flex: 1; position: relative; cursor: pointer; padding: 14px 12px 12px; margin-right: 18px; border-radius: 12px;
+    background: var(--panel); border: 1px solid var(--line); transition: all .25s; min-height: 108px; }
+  .stage:last-child { margin-right: 0; }
+  .stage:not(:last-child)::after { content: "›"; position: absolute; right: -15px; top: 38%; color: var(--muted); font-size: 22px; }
+  .stage .who { font: 500 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+  .stage .what { font-size: 16px; font-weight: 500; margin-top: 6px; line-height: 1.25; }
+  .stage .art { font: 12px var(--mono); color: var(--muted); margin-top: 8px; }
+  .stage:hover, .stage.sel { border-color: var(--lime); }
+  .stage.sel { background: #2b2f1d; }
+  .stage.pain .what::after { content: " ⚠"; color: var(--amber); font-size: 13px; }
+  .stage .ai { position: absolute; bottom: 10px; right: 10px; font: 700 10px var(--mono); color: #111; background: var(--lime); border-radius: 4px; padding: 1px 5px; }
+  .loop { margin-top: 14px; height: 34px; position: relative; }
+  .loop svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .sdlc-detail { margin-top: 10px; display: grid; grid-template-columns: 1.25fr 1fr; gap: 18px; }
+  .sdlc-detail .card { min-height: 150px; }
+  .sdlc-detail h3 { color: var(--lime); }
+  .compare-rows { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14.5px; }
+  .compare-rows .lbl { color: var(--muted); font-family: var(--mono); font-size: 12.5px; padding-top: 2px; }
+
+  /* ---------- slide 4: what is SDD ---------- */
+  .sdd-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 28px; margin-top: 20px; }
+  .levels { display: flex; flex-direction: column; gap: 12px; }
+  .level { display: grid; grid-template-columns: 46px 1fr; gap: 14px; align-items: start; }
+  .level .bar { height: 100%; min-height: 66px; border-radius: 8px; background: var(--panel); position: relative; overflow: hidden; }
+  .level .bar i { position: absolute; left: 0; right: 0; bottom: 0; background: var(--lime); }
+  .level h3 { font-size: 18px; } .level p { color: #cfcfcf; font-size: 14.5px; line-height: 1.4; margin-top: 3px; }
+  .bigq { font-size: 30px; font-weight: 300; line-height: 1.25; }
+  .bigq b { font-weight: 700; color: var(--lime); }
+  .three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 10px; }
+  .three .card { padding: 14px 16px; }
+  .three .lbl { font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+  .three p { font-size: 15px; line-height: 1.4; color: #e6e6e6; }
+  .three .q { margin-top: 8px; font: 12px var(--mono); color: var(--amber); }
+  .three .q.ok { color: var(--lime); }
+  .three .us { background: #23271a; border: 1px solid #4d5a1a; }
+
+  /* ---------- slide 5: markdown vs executable ---------- */
+  table.cmp { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 22px; font-size: 14.5px; }
+  table.cmp th { text-align: left; font-weight: 500; padding: 10px 14px; font-size: 15px; border-bottom: 1px solid var(--line-2); }
+  table.cmp th.us { color: #111; background: var(--lime); border-radius: 10px 10px 0 0; }
+  table.cmp td { padding: 9px 14px; border-bottom: 1px solid var(--line); vertical-align: top; color: #d6d6d6; line-height: 1.35; }
+  table.cmp td:first-child { color: var(--muted); font: 12.5px var(--mono); width: 170px; padding-top: 11px; }
+  table.cmp td.us { background: #23271a; color: #fff; }
+  table.cmp tr:last-child td.us { border-radius: 0 0 10px 10px; }
+  .verdict { margin-top: 16px; display: flex; gap: 18px; align-items: center; font-size: 17px; }
+  .verdict b { color: var(--lime); font-weight: 500; }
+
+  /* ---------- slide 6: ATDD ---------- */
+  .atdd-grid { display: grid; grid-template-columns: 430px 1fr; gap: 34px; margin-top: 22px; align-items: start; }
+  .cycle { position: relative; width: 430px; height: 460px; margin-top: -14px; }
+  .cycle svg { position: absolute; inset: 0; }
+  .cycle .node { position: absolute; width: 150px; text-align: center; cursor: pointer; }
+  .cycle .node .dot { width: 70px; height: 70px; border-radius: 50%; margin: 0 auto 6px; display: grid; place-items: center;
+    background: var(--panel); border: 2px solid var(--line-2); font: 700 22px var(--mono); color: var(--muted); transition: all .25s; }
+  .cycle .node.on .dot { border-color: var(--lime); color: #111; background: var(--lime); box-shadow: 0 0 28px rgba(208,255,0,.35); }
+  .cycle .node b { display: block; font-size: 17px; } .cycle .node span { font-size: 12.5px; color: var(--muted); }
+  .cycle .center { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); text-align: center; width: 160px; }
+  .cycle .center .big { font: 900 34px "Roboto"; color: var(--lime); letter-spacing: .04em; }
+  .cycle-detail h3 { font-size: 24px; } .cycle-detail p { color: #d6d6d6; font-size: 16px; line-height: 1.45; margin-top: 8px; }
+  .gherkin { margin-top: 14px; }
+
+  /* ---------- slide 7: layers ---------- */
+  .layers-grid { display: grid; grid-template-columns: 470px 1fr; gap: 30px; margin-top: 22px; }
+  .layer { display: grid; grid-template-columns: 1fr auto; align-items: center; padding: 12px 16px; border-radius: 10px; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--line); margin-bottom: 8px; transition: all .2s; }
+  .layer:hover { border-color: var(--muted); }
+  .layer.on { border-color: var(--lime); background: #2b2f1d; }
+  .layer .ln { font-size: 17px; font-weight: 500; } .layer .lp { font: 12px var(--mono); color: var(--muted); margin-top: 2px; }
+  .layer .lw { font: 11px var(--mono); color: var(--muted); text-align: right; }
+  .layer.side { border-style: dashed; }
+  .connector { text-align: center; color: var(--muted-2); font-size: 12px; margin: -4px 0 4px; font-family: var(--mono); }
+  .layer-detail h3 { font-size: 22px; } .layer-detail .why { color: #d6d6d6; font-size: 15.5px; line-height: 1.45; margin: 8px 0 14px; }
+  .rule-chip { margin-top: 12px; font-size: 14px; color: var(--muted); }
+  .rule-chip b { color: var(--lime); font-weight: 500; }
+
+  /* ---------- slide 8: structure ---------- */
+  .tree { margin-top: 18px; display: grid; grid-template-columns: 1fr; gap: 6px; }
+  .row { display: grid; grid-template-columns: 330px 220px 1fr 132px; gap: 14px; align-items: center; padding: 9px 14px; border-radius: 10px;
+    background: var(--panel); border: 1px solid var(--line); transition: all .25s; font-size: 14.5px; }
+  .row .p { font: 13.5px var(--mono); color: #eee; }
+  .row .layer-n { color: #cfcfcf; } .row .owner { color: var(--muted); }
+  .row .perm { text-align: right; font: 500 12px var(--mono); }
+  .row.can { border-color: var(--lime); background: #23271a; } .row.can .perm { color: var(--lime); }
+  .row.cannot { opacity: .5; } .row.cannot .perm { color: var(--red); }
+  .row.partial { border-color: var(--amber); } .row.partial .perm { color: var(--amber); }
+  .role-note { margin-top: 12px; font-size: 14.5px; color: #cfcfcf; min-height: 42px; }
+  .role-note code { font-family: var(--mono); color: var(--lime); font-size: 13px; }
+
+  /* ---------- slide 9: personas ---------- */
+  .personas { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 20px; }
+  .p-col h4 { margin: 0 0 10px; font: 500 13px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .p-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .p-card { padding: 12px 14px; border-radius: 12px; background: var(--panel); border: 1px solid var(--line); }
+  .p-card .pn { font-weight: 700; font-size: 16px; } .p-card .pd { font-size: 13px; color: #cfcfcf; margin-top: 4px; line-height: 1.35; }
+  .p-card .pa { font: 11.5px var(--mono); color: var(--lime); margin-top: 6px; }
+  .p-card.agent { border-color: #4d5a1a; background: #22261a; }
+  .p-card.agent .pn { font-family: var(--mono); font-size: 15px; color: var(--lime); }
+  .motto { margin-top: 18px; display: flex; gap: 10px; justify-content: center; font-size: 19px; font-weight: 300; }
+  .motto b { font-weight: 700; } .motto span.sep { color: var(--lime); }
+
+  /* ---------- slide 10: flow ---------- */
+  .lanes { position: relative; margin-top: 18px; border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+  .lane { display: grid; grid-template-columns: 112px 1fr; height: 62px; border-bottom: 1px solid var(--line); }
+  .lane:last-child { border-bottom: 0; }
+  .lane .lname { font: 500 12px var(--mono); color: var(--muted); padding: 0 12px; display: flex; align-items: center; background: #222; border-right: 1px solid var(--line); text-transform: uppercase; letter-spacing: .04em; }
+  .lane:nth-child(even) .ltrack { background: #212121; }
+  .flow-nodes { position: absolute; left: 112px; right: 0; top: 0; bottom: 0; }
+  .fnode { position: absolute; width: 64px; height: 46px; margin-left: -32px; border-radius: 9px; background: #2a2a2a; border: 1px solid var(--line-2);
+    font-size: 10.5px; line-height: 1.12; display: grid; place-items: center; text-align: center; padding: 3px; cursor: pointer; transition: all .25s; color: #bbb; z-index: 2; }
+  .fnode.done { border-color: #6a7d1d; color: #e8e8e8; background: #2b2f1d; }
+  .fnode.cur { background: var(--lime); color: #111; border-color: var(--lime); font-weight: 700; box-shadow: 0 0 24px rgba(208,255,0,.45); transform: scale(1.08); }
+  .flow-svg { position: absolute; left: 112px; top: 0; width: calc(100% - 112px); height: 100%; z-index: 1; pointer-events: none; }
+  .flow-svg path { fill: none; stroke: #3c3c3c; stroke-width: 2; }
+  .flow-svg path.done { stroke: var(--lime); }
+  .flow-bottom { display: grid; grid-template-columns: 1fr 380px; gap: 18px; margin-top: 14px; }
+  .flow-detail { min-height: 150px; }
+  .flow-detail .fh { display: flex; align-items: baseline; gap: 12px; }
+  .flow-detail h3 { font-size: 21px; } .flow-detail .step { font: 13px var(--mono); color: var(--lime); }
+  .flow-detail p { margin-top: 6px; font-size: 15px; color: #d6d6d6; line-height: 1.42; }
+  .flow-detail .proof { margin-top: 8px; font-size: 13.5px; color: var(--muted); }
+  .flow-detail .proof b { color: var(--lime); font-weight: 500; }
+  .flow-ctrl { display: flex; flex-direction: column; gap: 10px; }
+  .flow-ctrl .row-b { display: flex; gap: 8px; }
+  .flow-ctrl pre.code { font-size: 12px; padding: 10px 12px; min-height: 88px; white-space: pre-wrap; }
+
+  /* ---------- slide 11: two PRs ---------- */
+  .prs { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 22px; }
+  .pr { border-radius: 14px; padding: 18px 20px; background: var(--panel); border-top: 4px solid var(--red); }
+  .pr.green { border-top-color: var(--lime); }
+  .pr h3 { font-size: 21px; } .pr .sub { font: 12.5px var(--mono); color: var(--muted); margin-top: 4px; }
+  .pr ul { margin: 12px 0 0; padding: 0; list-style: none; }
+  .pr li { font-size: 14.5px; color: #d6d6d6; padding: 6px 0 6px 26px; position: relative; border-bottom: 1px solid #2f2f2f; line-height: 1.35; }
+  .pr li::before { content: "✓"; position: absolute; left: 4px; color: var(--lime); font-weight: 700; }
+  .pr li b { color: #fff; font-weight: 500; }
+  .redline { margin-top: 16px; }
+  .redline pre.code { font-size: 13px; }
+
+  /* ---------- slide 12: guard rails ---------- */
+  .cheat-grid { display: grid; grid-template-columns: 440px 1fr; gap: 26px; margin-top: 20px; }
+  .attacks { display: flex; flex-direction: column; gap: 8px; }
+  .attack { text-align: left; font: 15px "Roboto"; color: #e6e6e6; background: var(--panel); border: 1px solid var(--line); padding: 11px 14px 11px 40px;
+    border-radius: 10px; cursor: pointer; position: relative; transition: all .2s; }
+  .attack::before { content: "🤖"; position: absolute; left: 12px; top: 10px; font-size: 16px; }
+  .attack:hover { border-color: var(--muted); }
+  .attack.on { border-color: var(--red); background: #2e2120; }
+  .catch { min-height: 420px; display: flex; flex-direction: column; }
+  .catch .verdict-big { font: 900 30px "Roboto"; color: var(--red); letter-spacing: .02em; }
+  .catch h3 { font-size: 22px; margin-top: 6px; }
+  .catch p { color: #d6d6d6; font-size: 15.5px; line-height: 1.45; margin-top: 8px; }
+  .catch .where { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .catch pre.code { margin-top: 14px; font-size: 12.5px; white-space: pre-wrap; }
+  .catch.empty { justify-content: center; align-items: center; color: var(--muted); text-align: center; }
+
+  /* ---------- slide 13: lessons ---------- */
+  .lessons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 24px; }
+  .lessons .card { min-height: 168px; }
+  .lessons .card .sym { font: 12.5px var(--mono); color: var(--amber); margin-bottom: 8px; }
+  .lessons .card .fix { margin-top: 8px; font-size: 13.5px; color: var(--lime); }
+
+  /* ---------- slide 14: takeaways ---------- */
+  .take { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 30px; margin-top: 26px; max-width: 900px; }
+  .take div { font-size: 18px; line-height: 1.4; padding-left: 30px; position: relative; color: #e6e6e6; }
+  .take div::before { content: attr(data-n); position: absolute; left: 0; top: 2px; font: 500 13px var(--mono); color: var(--lime); }
+  .thanks { position: absolute; left: 80px; bottom: 210px; font: 900 64px "Roboto"; }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div id="viewport"><div id="stage">
+
+<!-- ======================================================= 1. TITLE -->
+<section class="slide title-slide" data-title="Title">
+  <img class="sphere" src="assets/sphere-small.png" style="left:894px;top:-128px;width:270px;opacity:.45" alt="">
+  <img class="sphere" src="assets/sphere-large.png" style="left:850px;top:150px;width:520px;opacity:.5" alt="">
+  <div class="dust" style="left:0;top:0;width:1280px;height:720px">
+    <i style="left:1110px;top:592px;width:9px;height:9px"></i><i style="left:1104px;top:642px;width:8px;height:8px"></i>
+    <i style="left:1240px;top:625px;width:5px;height:5px"></i><i style="left:1148px;top:652px;width:4px;height:4px"></i>
+    <i style="left:983px;top:668px;width:8px;height:8px"></i><i style="left:1132px;top:762px;width:7px;height:7px"></i>
+    <i style="left:260px;top:20px;width:4px;height:4px"></i><i style="left:218px;top:50px;width:8px;height:8px"></i>
+    <i style="left:40px;top:50px;width:7px;height:7px"></i><i style="left:280px;top:57px;width:2px;height:2px"></i>
+  </div>
+  <div class="t-wrap">
+    <div class="tag">meetup · AI-native delivery</div>
+    <h1>Spec-Driven Development<br>in the <span class="hl">AI era</span></h1>
+    <p class="sub">From markdown prompts to <b>executable specifications</b>:<br>how ATDD keeps coding agents honest, from requirement to production.</p>
+    <div class="meta">
+      <span class="chip lime">ATDD</span><span class="chip">Gherkin + Cucumber</span><span class="chip">Claude Code agents</span><span class="chip">GitHub Actions → Azure</span>
+    </div>
+  </div>
+  <div class="wordmark">
+    <img src="assets/logo-s.png" style="left:53px;top:508px;width:178px" alt="S">
+    <img src="assets/logo-c.png" style="left:263px;top:508px;width:181px" alt="c">
+    <img src="assets/logo-a.png" style="left:466px;top:512px;width:197px" alt="a">
+    <img src="assets/logo-l.png" style="left:679px;top:512px;width:108px" alt="l">
+    <img src="assets/logo-e.png" style="left:864px;top:512px;width:149px" alt="e">
+    <img src="assets/logo-r.png" style="left:1052px;top:512px;width:172px" alt="r">
+    <img src="assets/logo-tag.png" style="left:741px;top:665px;width:87px" alt="">
+  </div>
+</section>
+
+<!-- ======================================================= 2. PROBLEM -->
+<section class="slide" data-title="The problem">
+  <div class="tag">the problem</div>
+  <h2>AI made code <span class="hl">cheap</span>. Verification is the new bottleneck.</h2>
+  <p class="lead">A coding agent writes a feature in minutes. But who decides what "correct" means, and who proves the agent delivered it?</p>
+  <div class="problems">
+    <div class="card grad"><div class="num">01 / ambiguity</div><h3>Prose is open to interpretation</h3>
+      <p>"Loyalty members get 15% on large orders." Is 1000.00 large? Does it stack with 10%? The agent picks an answer silently.</p></div>
+    <div class="card grad"><div class="num">02 / self-grading</div><h3>The agent marks its own homework</h3>
+      <p>The same model writes the code <i>and</i> the tests. If it misunderstood the rule, its tests share the misunderstanding.</p></div>
+    <div class="card grad"><div class="num">03 / gaming</div><h3>Green at any cost</h3>
+      <p>Under pressure to pass, agents edit assertions, skip tests or hardcode the example values. The build is green, the feature is not.</p></div>
+    <div class="card grad"><div class="num">04 / drift</div><h3>Docs and code drift apart</h3>
+      <p>Requirements in Jira or markdown are not checked against the running system. After three sprints nobody trusts them.</p></div>
+    <div class="card grad"><div class="num">05 / review overload</div><h3>Humans drown in diffs</h3>
+      <p>Reviewing 2,000 generated lines line by line doesn't scale. Reviewers need evidence, not more code to read.</p></div>
+    <div class="card grad"><div class="num">06 / "done"</div><h3>"Works on my machine"</h3>
+      <p>Passing locally says nothing about staging or production. "Done" has to be proven in every environment.</p></div>
+  </div>
+  <div class="footer-l">// spec-driven development answers: what to build, and how we know it was built</div>
+</section>
+
+<!-- ======================================================= 3. SDLC -->
+<section class="slide" data-title="SDLC: then vs now">
+  <div class="tag">how the SDLC changed</div>
+  <h2>Traditional SDLC vs <span class="hl">spec-driven</span> delivery</h2>
+  <div class="toggle">
+    <button class="btn on" data-mode="trad">Traditional</button>
+    <button class="btn" data-mode="sdd">Spec-driven (AI era)</button>
+    <span class="muted" style="align-self:center;margin-left:10px;font-size:13.5px">click a stage for details</span>
+  </div>
+  <div class="pipeline" id="sdlc-pipe"></div>
+  <div class="loop"><svg id="sdlc-loop" viewBox="0 0 1120 34" preserveAspectRatio="none"></svg></div>
+  <div class="sdlc-detail">
+    <div class="card" id="sdlc-card"></div>
+    <div class="card" id="sdlc-compare"></div>
+  </div>
+</section>
+
+<!-- ======================================================= 4. WHAT IS SDD -->
+<section class="slide" data-title="What is SDD">
+  <div class="tag">spec-driven development</div>
+  <h2>The spec is the <span class="hl">source of truth</span>. Code is a derived artifact.</h2>
+  <div class="sdd-grid">
+    <div>
+      <p class="bigq">When an agent writes the code, the scarce human work moves upstream to <b>deciding behaviour</b> and downstream to <b>proving it</b>.</p>
+      <p class="lead" style="font-size:17px;margin-top:22px">A spec-driven workflow writes the intent down first, in a structured form, before any code. The agent plans and implements against it, and the spec outlives each change.</p>
+      <div style="margin-top:22px;display:flex;gap:10px;flex-wrap:wrap">
+        <span class="chip lime">intent before code</span><span class="chip lime">reviewable artifact</span><span class="chip lime">versioned with the code</span><span class="chip">agent-readable</span>
+      </div>
+    </div>
+    <div class="levels">
+      <div class="level"><div class="bar"><i style="height:33%"></i></div><div><h3>Spec-first</h3><p>Write a spec, let the agent build from it. The spec is often discarded after the task.</p></div></div>
+      <div class="level"><div class="bar"><i style="height:66%"></i></div><div><h3>Spec-anchored</h3><p>The spec is kept and evolved with the feature, and each change starts from a spec change.</p></div></div>
+      <div class="level"><div class="bar"><i style="height:100%"></i></div><div><h3>Spec-as-gate <span class="hl" style="font-size:14px">(this talk)</span></h3><p>The spec is <b>executable</b>. It fails until the behaviour exists, it gates every PR and it runs against production.</p></div></div>
+    </div>
+  </div>
+  <div class="tag" style="margin-top:26px">the same requirement, three ways</div>
+  <div class="three">
+    <div class="card"><div class="lbl">prose · Jira ticket</div><p>"Loyalty members get a bigger discount on large orders."</p><div class="q">? how large · stacking · rounding</div></div>
+    <div class="card"><div class="lbl">markdown spec · EARS style</div><p>WHEN a loyalty member places an order above 1000.00 EUR, THE SYSTEM SHALL apply a 15% discount.</p><div class="q">? is 1000.00 included · half-up or down</div></div>
+    <div class="card us"><div class="lbl">executable spec · Gherkin</div><p class="mono" style="font-size:13px;white-space:pre">| loyalty | 1000.00 |  900.00 |
+| loyalty | 1000.01 |  850.01 |
+| loyalty | 1234.56 | 1049.38 |</p><div class="q ok">✓ runs · ✗ fails until built</div></div>
+  </div>
+</section>
+
+<!-- ======================================================= 5. MARKDOWN vs EXECUTABLE -->
+<section class="slide" data-title="Markdown vs executable specs">
+  <div class="tag">markdown specs vs executable specs</div>
+  <h2>GitHub Spec Kit, Kiro… <span class="hl">and ATDD</span>: what's different?</h2>
+  <table class="cmp">
+    <tr><th></th><th>Markdown-driven SDD<br><span class="muted" style="font-size:13px;font-weight:400">GitHub Spec Kit · Kiro specs</span></th><th class="us">Executable specs (ATDD)<br><span style="font-size:13px;font-weight:400">this repo</span></th></tr>
+    <tr><td>artifact</td><td><code class="mono">spec.md</code> → <code class="mono">plan.md</code> → <code class="mono">tasks.md</code> (Kiro: <code class="mono">requirements.md</code> in EARS, <code class="mono">design.md</code>, <code class="mono">tasks.md</code>)</td>
+        <td class="us"><code class="mono">.feature</code> rules + example tables, plus an OpenAPI contract and SLO thresholds</td></tr>
+    <tr><td>who reads it</td><td>The agent, as context and instructions</td><td class="us">The agent <b>and the test runner</b>. Every example is run.</td></tr>
+    <tr><td>"done" means</td><td>Tasks are ticked off. Tests are usually written by the same agent.</td><td class="us">The scenarios turn from <b class="hl">red → green</b>. They were written and reviewed <i>before</i> the code.</td></tr>
+    <tr><td>can the agent change it?</td><td>Yes. It's a file in its context.</td><td class="us">No. The hook and the CI path guard make the spec read-only for the implementer.</td></tr>
+    <tr><td>after merge</td><td>Can drift from the code unless someone keeps it updated</td><td class="us">Living documentation. The same spec runs on preview, staging and <code class="mono">@smoke</code> in production.</td></tr>
+    <tr><td>strength</td><td>Great for planning, decomposition and design discussion</td><td class="us">Great for <b>verifiable behaviour</b>: boundaries, rounding, error cases</td></tr>
+  </table>
+  <div class="verdict"><span class="chip lime">not either/or</span><span>Markdown specs <b>tell the agent what to do</b>. Executable specs <b>tell you whether it did it</b>.</span></div>
+</section>
+
+<!-- ======================================================= 6. ATDD -->
+<section class="slide" data-title="What is ATDD">
+  <div class="tag">acceptance test-driven development</div>
+  <h2>ATDD: agree on <span class="hl">examples</span> first, then build until they pass</h2>
+  <div class="atdd-grid">
+    <div class="cycle" id="cycle">
+      <svg viewBox="0 0 430 430"><circle cx="215" cy="215" r="150" fill="none" stroke="#333" stroke-width="2" stroke-dasharray="4 6"/>
+        <circle id="cycle-arc" cx="215" cy="215" r="150" fill="none" stroke="#D0FF00" stroke-width="3" stroke-linecap="round"
+          stroke-dasharray="0 943" transform="rotate(-90 215 215)" style="transition:stroke-dasharray .5s"/></svg>
+      <div class="center"><div class="big">ATDD</div><div class="muted" style="font-size:12.5px">click the steps</div></div>
+    </div>
+    <div class="cycle-detail" id="cycle-detail"></div>
+  </div>
+</section>
+
+<!-- ======================================================= 7. LAYERS -->
+<section class="slide" data-title="ATDD layers">
+  <div class="tag">the layers of an executable spec</div>
+  <h2>Four layers: <span class="hl">business language</span> at the top, I/O at the bottom</h2>
+  <div class="layers-grid">
+    <div id="layers"></div>
+    <div class="layer-detail" id="layer-detail"></div>
+  </div>
+</section>
+
+<!-- ======================================================= 8. STRUCTURE -->
+<section class="slide" data-title="Project structure">
+  <div class="tag">how the project is structured</div>
+  <h2>Every folder has an <span class="hl">owner</span>, and agents have lanes</h2>
+  <div class="toggle" id="role-toggle">
+    <span class="muted" style="align-self:center;font-size:13.5px;font-family:var(--mono)">ATDD_ROLE =</span>
+    <button class="btn on" data-role="all">show owners</button>
+    <button class="btn" data-role="spec">spec</button>
+    <button class="btn" data-role="implement">implement</button>
+    <button class="btn" data-role="platform">platform (humans)</button>
+  </div>
+  <div class="tree" id="tree"></div>
+  <div class="role-note" id="role-note"></div>
+</section>
+
+<!-- ======================================================= 9. PERSONAS -->
+<section class="slide" data-title="Personas">
+  <div class="tag">who is involved</div>
+  <h2>Humans <span class="hl">decide</span>, agents do the work, evidence proves it</h2>
+  <div class="personas">
+    <div class="p-col"><h4>👤 Humans</h4>
+      <div class="p-grid">
+        <div class="p-card"><div class="pn">Product owner</div><div class="pd">Writes the requirement issue, answers open questions, approves the rules and examples in the spec PR.</div><div class="pa">owns: specs/features</div></div>
+        <div class="p-card"><div class="pn">Architect</div><div class="pd">Owns the API contract and the quality thresholds (p95 latency, error rate).</div><div class="pa">owns: openapi.yaml · slo.json</div></div>
+        <div class="p-card"><div class="pn">QA / test engineer</div><div class="pd">Owns the step → DSL → driver layers and the governance rules that keep the spec honest.</div><div class="pa">owns: acceptance/java</div></div>
+        <div class="p-card"><div class="pn">Developer</div><div class="pd">Reviews design and readability (behaviour is already proven), then merges the implementation PR.</div><div class="pa">owns: src/main · src/test</div></div>
+        <div class="p-card"><div class="pn">Platform team</div><div class="pd">Owns the pipeline, hooks, agent definitions and CLAUDE.md, i.e. the rules of the game.</div><div class="pa">owns: .github · .claude · ci</div></div>
+        <div class="p-card"><div class="pn">Release approver</div><div class="pd">Approves the production deployment once staging, the spec and the k6 SLO check are green.</div><div class="pa">gate: production environment</div></div>
+      </div>
+    </div>
+    <div class="p-col"><h4>🤖 Claude agents (.claude/agents)</h4>
+      <div class="p-grid" style="grid-template-columns:1fr">
+        <div class="p-card agent"><div class="pn">spec-author</div><div class="pd">Turns the issue into Gherkin rules + examples through example mapping. Asks questions instead of guessing (<code class="mono">needs-clarification</code>).</div></div>
+        <div class="p-card agent"><div class="pn">acceptance-engineer</div><div class="pd">Adds step glue, DSL verbs and driver methods, then proves the new scenarios are <b>red for the right reason</b>.</div></div>
+        <div class="p-card agent"><div class="pn">implementer</div><div class="pd">Writes production code and unit/property tests until the spec is green. It cannot touch the spec.</div></div>
+        <div class="p-card agent"><div class="pn">spec-conformance-reviewer</div><div class="pd">Independent, read-only. Did the code implement the <i>rule</i>, or just the example numbers?</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="motto"><b>Humans decide</b><span class="sep">·</span>agents do the work<span class="sep">·</span><b>evidence proves it</b>: red check, green spec, mutation score, @smoke in prod</div>
+</section>
+
+<!-- ======================================================= 10. FLOW -->
+<section class="slide" data-title="End-to-end flow">
+  <div class="tag">requirement → production · REQ-ORD-016 tiered loyalty discount</div>
+  <h2>One requirement, <span class="hl">end to end</span></h2>
+  <div class="lanes" id="lanes">
+    <div class="lane"><div class="lname">Product owner</div><div class="ltrack"></div></div>
+    <div class="lane"><div class="lname">Claude agents</div><div class="ltrack"></div></div>
+    <div class="lane"><div class="lname">CI pipeline</div><div class="ltrack"></div></div>
+    <div class="lane"><div class="lname">Developer</div><div class="ltrack"></div></div>
+    <div class="lane"><div class="lname">Release · prod</div><div class="ltrack"></div></div>
+    <svg class="flow-svg" id="flow-svg"></svg>
+    <div class="flow-nodes" id="flow-nodes"></div>
+  </div>
+  <div class="flow-bottom">
+    <div class="card flow-detail" id="flow-detail"></div>
+    <div class="flow-ctrl">
+      <div class="row-b"><button class="btn" id="f-prev">◀ prev</button><button class="btn on" id="f-next">next ▶</button><button class="btn" id="f-play">▶ play</button><button class="btn" id="f-reset">↺</button></div>
+      <pre class="code" id="flow-cmd"></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================= 11. TWO PRs -->
+<section class="slide" data-title="Two kinds of PR">
+  <div class="tag">two kinds of pull request, never mixed</div>
+  <h2>First prove it's <span style="color:var(--red)">red</span>, then prove it's <span class="hl">green</span></h2>
+  <div class="prs">
+    <div class="pr"><h3>① Spec PR <span class="muted" style="font-size:14px;font-weight:400">· ATDD_ROLE=spec</span></h3>
+      <div class="sub">specs/ · acceptance/ · delivery/ (+ REQ id added to pending list)</div>
+      <ul>
+        <li><b>Path guard:</b> only spec paths changed, <code class="mono">kind=spec</code></li>
+        <li><b>Contract lint:</b> openapi.yaml is valid</li>
+        <li><b>New scenarios are red</b>, failing on a <code class="mono">Then</code> assertion. No undefined steps, no crashes.</li>
+        <li><b>Everything else still green.</b> The pending REQ is excluded, so <code class="mono">main</code> stays green.</li>
+        <li><b>PO approves</b> the Rule lines and boundary rows</li>
+      </ul>
+    </div>
+    <div class="pr green"><h3>② Implementation PR <span class="muted" style="font-size:14px;font-weight:400">· ATDD_ROLE=implement</span></h3>
+      <div class="sub">src/main · src/test (+ REQ id removed from pending list)</div>
+      <ul>
+        <li><b>Path guard:</b> only <code class="mono">src/</code> changed, the pending ID removed (never added)</li>
+        <li><b>Unit + jqwik property + ArchUnit</b> tests pass; the domain stays framework-free</li>
+        <li><b>The whole spec is green</b>, plus holdout scenarios the agent never saw</li>
+        <li><b>Mutation testing (PIT) ≥ 80%</b>: planted bugs get caught</li>
+        <li><b>Preview deploy:</b> the same spec runs over the network, plus contract fuzzing (Schemathesis)</li>
+      </ul>
+    </div>
+  </div>
+  <div class="redline">
+<pre class="code"><span class="c">$ ONLY='@REQ-ORD-016' scripts/acceptance.sh &amp;&amp; python3 ci/red_check.py target/cucumber/report.json</span>
+Checked 6 scenario(s): <span style="color:var(--red)">4 good red</span>, 2 already passing, 0 problem(s).
+  <span style="color:var(--red)">✓ red</span>   … payable amount of the order <span class="c">expected</span> <span class="n">850.01</span> <span class="c">but was</span> <span class="n">900.01</span>
+  <span class="c">• green … 1000.00 → 900.00  (already satisfied; confirm it pins an intended boundary)</span>
+<span class="g">✓ Red for the right reason.</span></pre>
+  </div>
+</section>
+
+<!-- ======================================================= 12. GUARD RAILS -->
+<section class="slide" data-title="Guard rails">
+  <div class="tag">keeping agents honest</div>
+  <h2>Try to <span style="color:var(--red)">cheat</span> the spec. Something will catch you.</h2>
+  <div class="cheat-grid">
+    <div class="attacks" id="attacks"></div>
+    <div class="card catch empty" id="catch">← pick something an over-eager agent might try</div>
+  </div>
+</section>
+
+<!-- ======================================================= 13. LESSONS -->
+<section class="slide" data-title="Lessons learned">
+  <div class="tag">lessons from real runs</div>
+  <h2>Things that <span class="hl">actually happened</span></h2>
+  <div class="lessons">
+    <div class="card grad"><div class="sym">agent "succeeds" in ~20 s, no PR</div><h3>Silent permission denials</h3>
+      <p>In CI, tool calls the agent isn't allowed to make are denied quietly. Check <code class="mono">permission_denials_count</code>.</p>
+      <div class="fix">→ keep <code class="mono">--allowedTools</code> complete</div></div>
+    <div class="card grad"><div class="sym">changed agents.yml, same behaviour</div><h3>"Re-run" replays old config</h3>
+      <p>Re-running a workflow uses the original commit's YAML. Your fix isn't in that run.</p>
+      <div class="fix">→ start a fresh run (re-add the label)</div></div>
+    <div class="card grad"><div class="sym">reviewer: "non-human actor"</div><h3>Bots reviewing bots</h3>
+      <p>The conformance reviewer refused PRs opened by the Claude bot. Agent-to-agent hand-offs need explicit trust.</p>
+      <div class="fix">→ <code class="mono">allowed_bots: 'claude'</code></div></div>
+    <div class="card grad"><div class="sym">k6: many 404s, normal latency</div><h3>"Healthy" was the old revision</h3>
+      <p>The deploy reported healthy while the old revision still answered. In-memory state was lost on the traffic switch.</p>
+      <div class="fix">→ wait until /actuator/info reports the new SHA</div></div>
+    <div class="card grad"><div class="sym">property test failed after a rule change</div><h3>Tests pin old rules (good!)</h3>
+      <p><code class="mono">discountNeverExceedsTenPercent</code> encoded the old 10% rule. When the rule changes, the tests pinning it must change too.</p>
+      <div class="fix">→ a feature, not a bug</div></div>
+    <div class="card grad"><div class="sym">hardcode-shaped risk</div><h3>Example ≠ rule</h3>
+      <p>Agents love example values. Holdout scenarios with values the agent never sees, plus an independent reviewer, catch "if total == 1000.01".</p>
+      <div class="fix">→ implement the Rule: line, not the table</div></div>
+  </div>
+</section>
+
+<!-- ======================================================= 14. TAKEAWAYS -->
+<section class="slide" data-title="Takeaways">
+  <img class="sphere" src="assets/sphere-large.png" style="left:880px;top:250px;width:470px;opacity:.45" alt="">
+  <div class="dust" style="left:0;top:0;width:1280px;height:720px">
+    <i style="left:1090px;top:160px;width:9px;height:9px"></i><i style="left:1150px;top:200px;width:5px;height:5px"></i>
+    <i style="left:1020px;top:230px;width:7px;height:7px"></i><i style="left:1200px;top:120px;width:3px;height:3px"></i>
+  </div>
+  <div class="tag">takeaways</div>
+  <h2>Let agents write the code.<br><span class="hl">Keep humans in charge of "correct".</span></h2>
+  <div class="take">
+    <div data-n="01">Specs as <b>examples</b>, not prose. Boundaries and rounding are where AI guesses.</div>
+    <div data-n="02">Make the spec <b>executable</b>, red before code and green after.</div>
+    <div data-n="03"><b>Separate the roles:</b> who writes the spec is not who satisfies it.</div>
+    <div data-n="04"><b>Defence in depth:</b> hook, path guard, holdout, mutation and an independent reviewer.</div>
+    <div data-n="05">One spec, <b>every environment</b>: laptop, preview, staging and production.</div>
+    <div data-n="06">Markdown SDD and ATDD <b>combine well</b>: plan in prose, gate on examples.</div>
+  </div>
+  <div class="thanks">Thank you! <span class="hl">Q&amp;A</span></div>
+  <div class="brand" style="top:auto;bottom:118px;left:80px;right:auto" data-wordmark="0.26"></div>
+  <div class="footer-l" style="bottom:80px">github.com/attila-balogh-biro86/atdd-orders · docs/RUNBOOK-DEMO.md</div>
+</section>
+
+</div></div>
+<div id="nav"><button id="nav-prev" title="Previous (←)">‹</button><button id="nav-full" title="Fullscreen (F)">⤢</button><button id="nav-next" title="Next (→)">›</button></div>
+
+<script>
+(() => {
+  /* ================= deck engine ================= */
+  const stage = document.getElementById('stage');
+  const slides = [...document.querySelectorAll('.slide')];
+  let cur = 0;
+
+  const WM = [['s', 0, 0, 178], ['c', 210, 0, 181], ['a', 413, 4, 197], ['l', 626, 4, 108], ['e', 811, 4, 149], ['r', 999, 4, 172], ['tag', 688, 157, 87]];
+  const wordmark = s => `<div class="wm" style="--s:${s}"><div class="wm-in">${
+    WM.map(([n, x, y, w]) => `<img src="assets/logo-${n}.png" style="left:${x}px;top:${y}px;width:${w}px" alt="">`).join('')}</div></div>`;
+  document.querySelectorAll('[data-wordmark]').forEach(el => el.innerHTML = wordmark(+el.dataset.wordmark));
+  slides.forEach((s, i) => {
+    if (i === 0 || i === slides.length - 1) return;
+    s.insertAdjacentHTML('beforeend',
+      `<div class="brand" title="Scaler">${wordmark(0.1)}</div>
+       <div class="pageno"><b>${String(i + 1).padStart(2, '0')}</b> / ${String(slides.length).padStart(2, '0')}</div>`);
+  });
+
+  function fit() {
+    const s = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+    stage.style.transform = `scale(${s})`;
+  }
+  function go(n) {
+    cur = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, i) => s.classList.toggle('active', i === cur));
+    document.getElementById('progress').style.width = ((cur + 1) / slides.length * 100) + '%';
+    history.replaceState(null, '', '#' + (cur + 1));
+    document.title = `${cur + 1}. ${slides[cur].dataset.title} · Spec-Driven Development`;
+    if (slides[cur].dataset.title === 'End-to-end flow') requestAnimationFrame(drawFlow);
+  }
+  window.addEventListener('resize', fit);
+  document.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('button') && (e.key === ' ' || e.key === 'Enter')) return;
+    if (['ArrowRight', 'PageDown', ' '].includes(e.key)) { e.preventDefault(); go(cur + 1); }
+    else if (['ArrowLeft', 'PageUp'].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Home') go(0);
+    else if (e.key === 'End') go(slides.length - 1);
+    else if (e.key === 'f' || e.key === 'F') toggleFull();
+  });
+  function toggleFull() { document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); }
+  document.getElementById('nav-prev').onclick = () => go(cur - 1);
+  document.getElementById('nav-next').onclick = () => go(cur + 1);
+  document.getElementById('nav-full').onclick = toggleFull;
+
+  /* ================= slide 3: SDLC ================= */
+  const SDLC = {
+    trad: {
+      stages: [
+        { who: 'BA / PO', what: 'Requirements document', art: 'Word · Confluence · Jira', pain: true,
+          d: 'Requirements are written as prose. They are reviewed once, then rarely updated, and they never run.',
+          issue: 'Ambiguity is discovered weeks later, during testing.' },
+        { who: 'Architect', what: 'Design', art: 'diagrams, ADRs',
+          d: 'Design documents translate requirements into components. A second translation, with another chance to lose meaning.' },
+        { who: 'Developers', what: 'Implementation', art: 'code + some unit tests', pain: true,
+          d: 'Developers interpret the document. Unit tests verify the code against the developer\'s understanding, not the business\'s.',
+          issue: 'Tests are written after the fact, by the same person who wrote the code.' },
+        { who: 'QA', what: 'Testing', art: 'test cases in a tool', pain: true,
+          d: 'QA writes yet another interpretation as test cases, often manual and often late. Defects bounce back to development.',
+          issue: 'Three teams, three interpretations of one rule.' },
+        { who: 'Business', what: 'UAT', art: 'sign-off',
+          d: 'The business finally sees the behaviour. Misunderstandings found here are the most expensive to fix.' },
+        { who: 'Ops', what: 'Release', art: 'change ticket',
+          d: 'Release is a separate hand-off. Production verification is a smoke check that is unrelated to the requirements.' },
+      ],
+      loop: 'Feedback loop: weeks. The requirement → defect → fix cycle crosses 4 teams.',
+      compare: [['source of truth', 'documents (they drift)'], ['written by', 'humans, at human speed'], ['bottleneck', 'writing code'], ['tests', 'after code, a separate interpretation'], ['"done" means', 'QA / UAT signed off']],
+    },
+    sdd: {
+      stages: [
+        { who: 'PO', what: 'Requirement issue', art: 'rules + known examples',
+          d: 'A short GitHub issue: story, rules, known examples and decisions on open questions. It starts a conversation; it is not the spec.' },
+        { who: 'PO + spec agent', what: 'Example mapping', art: '.feature (Gherkin)', ai: true,
+          d: 'The spec-author agent turns the rules into concrete examples and hunts for boundaries (1000.00 vs 1000.01) and rounding. If something is unclear, it asks.' },
+        { who: 'Acceptance agent + CI', what: 'Executable spec: red', art: 'spec PR', ai: true,
+          d: 'The scenarios are wired to the system and must fail on an assertion, for the right reason. The PO approves the Rule lines, not the code.' },
+        { who: 'Implementer agent', what: 'Implement until green', art: 'impl PR', ai: true,
+          d: 'The agent reads the failing scenarios as its task description, implements the rule and adds unit + property tests. It cannot edit the spec.' },
+        { who: 'CI + reviewer agent', what: 'Gates', art: 'holdout · PIT · preview', ai: true,
+          d: 'Whole spec green, holdout scenarios, mutation testing ≥ 80%, preview deploy, contract fuzzing and an independent conformance review.' },
+        { who: 'Pipeline + approver', what: 'Same spec in every env', art: 'staging · prod @smoke',
+          d: 'The image is built once. The same scenarios run on staging, k6 checks the SLOs, a human approves, and @smoke scenarios run in production every 30 minutes.' },
+      ],
+      loop: 'Feedback loop: minutes. The spec goes red → green in one PR; humans review evidence, not keystrokes.',
+      compare: [['source of truth', 'executable .feature files'], ['written by', 'agents, gated by humans'], ['bottleneck', 'deciding behaviour + verifying'], ['tests', 'before code, agreed with the PO'], ['"done" means', 'spec green in every environment']],
+    },
+  };
+  let sdlcMode = 'trad', sdlcSel = 0;
+  function renderSdlc() {
+    const m = SDLC[sdlcMode];
+    document.getElementById('sdlc-pipe').innerHTML = m.stages.map((s, i) =>
+      `<div class="stage ${s.pain ? 'pain' : ''} ${i === sdlcSel ? 'sel' : ''}" data-i="${i}">
+         ${s.ai ? '<span class="ai">AI</span>' : ''}
+         <div class="who">${s.who}</div><div class="what">${s.what}</div><div class="art">${s.art}</div></div>`).join('');
+    const s = m.stages[sdlcSel];
+    document.getElementById('sdlc-card').innerHTML =
+      `<h3>${String(sdlcSel + 1).padStart(2, '0')} · ${s.what}</h3><p>${s.d}</p>` +
+      (s.issue ? `<p style="margin-top:10px;color:var(--amber)">⚠ ${s.issue}</p>` : '') +
+      `<p style="margin-top:12px;font-size:13.5px" class="muted">${m.loop}</p>`;
+    document.getElementById('sdlc-compare').innerHTML =
+      `<div class="compare-rows">${m.compare.map(([a, b]) => `<div class="lbl">${a}</div><div>${b}</div>`).join('')}</div>`;
+    // feedback-loop arc
+    const svg = document.getElementById('sdlc-loop');
+    svg.innerHTML = sdlcMode === 'trad'
+      ? `<path d="M 1030 0 C 1030 20, 90 20, 90 0" fill="none" stroke="#FFC857" stroke-width="2" stroke-dasharray="6 6"/>
+         <text x="560" y="32" fill="#FFC857" font-size="12" text-anchor="middle" font-family="Roboto Mono">defects found late flow all the way back ↩</text>`
+      : `<path d="M 470 0 C 470 20, 650 20, 650 0" fill="none" stroke="#D0FF00" stroke-width="2"/>
+         <text x="560" y="32" fill="#D0FF00" font-size="12" text-anchor="middle" font-family="Roboto Mono">red → green loop, minutes</text>`;
+    document.querySelectorAll('#sdlc-pipe .stage').forEach(el => el.onclick = () => { sdlcSel = +el.dataset.i; renderSdlc(); });
+  }
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => {
+    sdlcMode = b.dataset.mode; sdlcSel = 0;
+    document.querySelectorAll('[data-mode]').forEach(x => x.classList.toggle('on', x === b));
+    renderSdlc();
+  });
+  renderSdlc();
+
+  /* ================= slide 6: ATDD cycle ================= */
+  const CYCLE = [
+    { k: 'Discuss', s: 'example mapping', pos: [140, 30],
+      h: '1 · Discuss: example mapping',
+      p: 'PO, dev and QA (or the spec-author agent) take a rule and ask for <b>concrete examples</b>, especially at the edges. Questions nobody can answer become <code class="mono">needs-clarification</code>, not guesses.',
+      code: `<span class="c">Rule:</span> loyalty 15% strictly above 1000.00
+<span class="c">  ✓</span> 1000.00 → <span class="n">900.00</span>   <span class="c">boundary, still 10%</span>
+<span class="c">  ✓</span> 1000.01 → <span class="n">850.01</span>   <span class="c">850.0085 rounds HALF_UP</span>
+<span class="c">  ?</span> do the tiers stack?   <span class="c">→ PO: no, never 25%</span>` },
+    { k: 'Distill', s: 'Gherkin spec', pos: [290, 180],
+      h: '2 · Distill: write it as Gherkin',
+      p: 'The examples become a <code class="mono">.feature</code> file in plain domain language, with no HTTP, JSON or class names. It is tagged <code class="mono">@REQ-…</code> per feature and <code class="mono">@AC-…</code> per scenario for traceability.',
+      code: `<span class="k">Rule:</span> Loyalty members get 10% off orders strictly above <span class="n">100.00</span> EUR
+
+  <span class="a">@AC-ORD-012-2</span>
+  <span class="k">Scenario Outline:</span> Threshold and rounding boundaries
+    <span class="k">Given</span> a <span class="s">&lt;membership&gt;</span> customer
+    <span class="k">When</span> they place an order totalling <span class="s">&lt;total&gt;</span> EUR
+    <span class="k">Then</span> the payable amount is <span class="s">&lt;payable&gt;</span> EUR
+    | loyalty | <span class="n">100.00</span> | <span class="n">100.00</span> |
+    | loyalty | <span class="n">100.01</span> |  <span class="n">90.01</span> |
+    | loyalty | <span class="n">133.35</span> | <span class="n">120.02</span> |` },
+    { k: 'Develop', s: 'red → green', pos: [140, 330],
+      h: '3 · Develop: red, then green',
+      p: 'The scenarios are proven <b>red for the right reason</b>: a Then assertion fails, with no missing steps. Then the implementation (here an agent) works until they are green, with unit/property tests below them.',
+      code: `<span class="c">spec PR  </span> <span style="color:var(--red)">✗ expected 850.01 but was 900.01</span>  <span class="c">← right reason</span>
+<span class="c">impl PR  </span> <span class="g">✓ 24 scenarios passed</span>
+<span class="c">         </span> <span class="g">✓ PIT mutation score ≥ 80%</span>` },
+    { k: 'Demo', s: 'living docs', pos: [-10, 180],
+      h: '4 · Demo: living documentation',
+      p: 'The same scenarios are the demo and the documentation. A traceability report maps <b>requirement → acceptance criterion → result</b> per environment, so a stakeholder can read whether a rule is live in production.',
+      code: `<span class="c">$ python3 ci/traceability.py report.json production</span>
+REQ-ORD-012  AC-ORD-012-1  <span class="g">✅</span>  <span class="c">@smoke</span>
+REQ-ORD-015  AC-ORD-015-1  <span class="g">✅</span>
+REQ-ORD-016  AC-ORD-016-1  <span class="g">✅</span>` },
+  ];
+  const cyc = document.getElementById('cycle');
+  CYCLE.forEach((c, i) => {
+    const n = document.createElement('div');
+    n.className = 'node'; n.style.left = c.pos[0] + 'px'; n.style.top = c.pos[1] + 'px';
+    n.innerHTML = `<div class="dot">${i + 1}</div><b>${c.k}</b><span>${c.s}</span>`;
+    n.onclick = () => selCycle(i);
+    cyc.appendChild(n);
+  });
+  function selCycle(i) {
+    [...cyc.querySelectorAll('.node')].forEach((n, j) => n.classList.toggle('on', j === i));
+    document.getElementById('cycle-arc').setAttribute('stroke-dasharray', `${943 * (i + 1) / 4} 943`);
+    const c = CYCLE[i];
+    document.getElementById('cycle-detail').innerHTML =
+      `<h3>${c.h}</h3><p>${c.p}</p><pre class="code gherkin">${c.code}</pre>
+       <div class="card grad" style="margin-top:16px"><h3 style="font-size:16px" class="hl">Why ATDD fits coding agents</h3>
+       <p>The examples are the prompt <b>and</b> the acceptance test at the same time. The agent gets an unambiguous task; you get an objective "done".</p></div>`;
+  }
+  selCycle(0);
+
+  /* ================= slide 7: layers ================= */
+  const LAYERS = [
+    { n: 'Feature: Gherkin', p: 'specs/features/orders/*.feature', w: 'PO + architects',
+      why: 'The <b>what</b>: rules and examples in business language. It has no idea whether it runs against an in-process app, a preview URL or production.',
+      code: `<span class="k">Given</span> a loyalty customer
+<span class="k">When</span> they place an order totalling <span class="n">1000.01</span> EUR
+<span class="k">Then</span> the payable amount is <span class="n">850.01</span> EUR`,
+      rule: 'No HTTP, JSON, URLs, CSS selectors or class names in scenarios.' },
+    { n: 'Step definitions', p: 'acceptance/…/steps/OrderSteps.java', w: 'QA / test eng.',
+      why: 'Glue between sentence and code. Every step is a <b>one-line delegation</b>, so there\'s no logic to hide bugs or gaming in.',
+      code: `<span class="a">@Then</span>(<span class="s">"the payable amount is {amount} EUR"</span>)
+<span class="k">public void</span> thePayableAmountIs(BigDecimal payable) {
+    orders.assertPayable(payable);
+}`,
+      rule: 'Reuse existing phrases. A new step only when the domain language needs it.' },
+    { n: 'DSL', p: 'acceptance/…/dsl/OrdersDsl.java', w: 'QA / test eng.',
+      why: 'The domain-specific test language: verbs like <code class="mono">placeOrder</code> and <code class="mono">assertPayable</code>. It holds the state of the scenario and <b>all the assertions</b>.',
+      code: `<span class="k">public void</span> placeOrder(BigDecimal total) {
+    assertThat(customerId).as(<span class="s">"a customer must be chosen"</span>).isNotNull();
+    lastPlacement = driver.placeOrder(customerId, total);
+}
+<span class="k">public void</span> assertPayable(BigDecimal expected) { … }`,
+      rule: 'Assertions live in the DSL, never in steps or drivers.' },
+    { n: 'Protocol drivers', p: 'acceptance/…/drivers/*Driver.java', w: 'QA / test eng.',
+      why: 'The <b>how</b>: all I/O lives here. Swap the driver or the base URL, and the same spec runs embedded, on a PR preview, on staging or in production.',
+      code: `<span class="k">public</span> OrderOutcome placeOrder(UUID customerId, BigDecimal total) {
+    Response r = post(<span class="s">"/api/orders"</span>, Map.of(…));
+    <span class="k">return switch</span> (r.status) {
+        <span class="k">case</span> <span class="n">201</span> -> <span class="k">new</span> Placed(…payable…);
+        <span class="k">case</span> <span class="n">400</span> -> <span class="k">new</span> Rejected(INVALID_ORDER, detail);`,
+      rule: 'scripts/acceptance.sh  ·  scripts/acceptance.sh remote https://<env>' },
+    { n: 'System under test', p: 'src/main/** (Spring Boot)', w: 'developers / implementer agent', side: true,
+      why: 'The only layer the implementer agent may change. The domain package stays free of Spring/Jakarta (ArchUnit), and is covered by unit, jqwik property and mutation tests.',
+      code: `<span class="k">if</span> (membership == LOYALTY &amp;&amp; normalized.compareTo(THRESHOLD) > <span class="n">0</span>) {
+    <span class="k">return</span> normalized.multiply(LOYALTY_FACTOR)
+                     .setScale(<span class="n">2</span>, RoundingMode.HALF_UP);
+}`,
+      rule: 'Implement the Rule: line, not the example values.' },
+    { n: 'Contract + quality', p: 'specs/contracts/openapi.yaml · specs/quality/slo.json', w: 'architects', side: true,
+      why: 'Two more executable spec layers beside the scenarios: the <b>OpenAPI contract</b> (linted, then fuzzed with Schemathesis) and <b>SLO thresholds</b> checked by k6 on staging.',
+      code: `<span class="c">// specs/quality/slo.json → perf/orders-load.js (k6) on staging</span>
+<span class="s">"placeOrder"</span>: { <span class="s">"p95_ms"</span>: <span class="n">300</span>, <span class="s">"p99_ms"</span>: <span class="n">800</span>,
+  <span class="s">"error_rate_max"</span>: <span class="n">0.01</span>,
+  <span class="s">"load"</span>: { <span class="s">"vus"</span>: <span class="n">20</span>, <span class="s">"duration"</span>: <span class="s">"60s"</span> } }`,
+      rule: 'Non-functional requirements are specs too.' },
+  ];
+  let layerSel = 0;
+  function renderLayers() {
+    document.getElementById('layers').innerHTML = LAYERS.map((l, i) =>
+      (i === 4 ? '<div class="connector">— exercises —</div>' : '') +
+      `<div class="layer ${l.side ? 'side' : ''} ${i === layerSel ? 'on' : ''}" data-i="${i}">
+         <div><div class="ln">${l.n}</div><div class="lp">${l.p}</div></div><div class="lw">${l.w}</div></div>`).join('');
+    const l = LAYERS[layerSel];
+    document.getElementById('layer-detail').innerHTML =
+      `<div class="tag">layer ${layerSel + 1}</div><h3 style="margin-top:6px">${l.n}</h3><p class="why">${l.why}</p>
+       <pre class="code">${l.code}</pre><p class="rule-chip"><b>rule:</b> ${l.rule.replace(/</g, '&lt;')}</p>`;
+    document.querySelectorAll('#layers .layer').forEach(el => el.onclick = () => { layerSel = +el.dataset.i; renderLayers(); });
+  }
+  renderLayers();
+
+  /* ================= slide 8: structure ================= */
+  // permission per role: c = can edit, x = blocked, p = partial
+  const TREE = [
+    { p: 'specs/features/**/*.feature', l: 'Intent: rules + examples', o: 'Product + architects (CODEOWNERS)', spec: 'c', implement: 'x', platform: 'c' },
+    { p: 'specs/contracts/openapi.yaml', l: 'Contract', o: 'Architects', spec: 'c', implement: 'x', platform: 'c' },
+    { p: 'specs/quality/slo.json', l: 'Quality thresholds (k6)', o: 'Architects', spec: 'c', implement: 'x', platform: 'c' },
+    { p: 'acceptance/java/**', l: 'Steps → DSL → drivers', o: 'QA / test engineers', spec: 'c', implement: 'x', platform: 'c' },
+    { p: 'delivery/pending-requirements.txt', l: 'Specified, not yet built', o: 'Spec PR adds · impl PR removes', spec: 'p:add lines', implement: 'p:remove only', platform: 'c' },
+    { p: 'src/main/** · src/test/**', l: 'Implementation + unit tests', o: 'Developers / implementer agent', spec: 'x', implement: 'c', platform: 'c' },
+    { p: '.github/ · .claude/ · CLAUDE.md', l: 'Pipelines, agents, hooks', o: 'Platform team', spec: 'x', implement: 'x', platform: 'c' },
+    { p: 'ci/ · scripts/', l: 'Guard, red check, traceability', o: 'Platform team', spec: 'x', implement: 'x', platform: 'c' },
+  ];
+  const ROLE_NOTE = {
+    all: 'Ownership is enforced three times: <code>CODEOWNERS</code> for review, a Claude Code <b>PreToolUse hook</b> (<code>.claude/hooks/guard-paths.mjs</code>) locally, and <code>ci/guard.sh</code> on every PR. The hook is a convenience; CI is the authority.',
+    spec: '<code>ATDD_ROLE=spec</code>: the spec agents may write features, contract, test glue and <b>add</b> the new REQ to the pending list. They cannot touch production code: the implementation is a separate PR.',
+    implement: '<code>ATDD_ROLE=implement</code> (the default): the implementer may only change <code>src/**</code> and <b>remove</b> its REQ from the pending list. The spec is read-only. If a scenario looks wrong, it stops and explains why.',
+    platform: '<code>ATDD_ROLE=platform</code>: unrestricted, for <b>humans only</b>, to maintain the pipeline, hooks and agent definitions. Agents never get to change the rules of the game.',
+  };
+  function renderTree(role) {
+    document.getElementById('tree').innerHTML = TREE.map(t => {
+      let cls = '', perm = '';
+      if (role !== 'all') {
+        const v = t[role];
+        if (v === 'c') { cls = 'can'; perm = '✎ can edit'; }
+        else if (v === 'x') { cls = 'cannot'; perm = '🔒 blocked'; }
+        else { cls = 'partial'; perm = '± ' + v.slice(2); }
+      }
+      return `<div class="row ${cls}"><div class="p">${t.p}</div><div class="layer-n">${t.l}</div><div class="owner">${t.o}</div><div class="perm">${perm}</div></div>`;
+    }).join('');
+    document.getElementById('role-note').innerHTML = ROLE_NOTE[role];
+  }
+  document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => {
+    document.querySelectorAll('[data-role]').forEach(x => x.classList.toggle('on', x === b));
+    renderTree(b.dataset.role);
+  });
+  renderTree('all');
+
+  /* ================= slide 10: flow ================= */
+  // lane: 0 PO, 1 agents, 2 CI, 3 developer, 4 release/prod
+  const FLOW = [
+    { lane: 0, t: 'Requirement issue', h: 'PO writes the requirement issue',
+      p: 'Story, rules, known examples and PO decisions (tiers don\'t stack; 15% applies to the whole amount). It starts a conversation; the spec comes next.',
+      proof: 'the issue', cmd: 'gh issue create --title "[REQ-ORD-016] Tiered loyalty discount" \\\n  --body-file /tmp/req-016.md --label requirement' },
+    { lane: 0, t: 'label agent:spec', h: 'PO hands it to the spec agents',
+      p: 'Adding the label starts agents.yml → spec-draft with ATDD_ROLE=spec. Claude runs /spec on the issue.',
+      proof: 'workflow run', cmd: 'gh issue edit "$ISSUE" --add-label agent:spec' },
+    { lane: 1, t: 'Example mapping', h: 'spec-author: rules → examples',
+      p: 'It writes the .feature file with boundary rows (999.99, 1000.00, 1000.01) and a rounding row (1234.56 → 1049.38), and adds REQ-ORD-016 to the pending list. It asks on the issue if something is unclear.',
+      proof: 'needs-clarification, if anything is unclear', cmd: '# specs/features/orders/discount.feature\n| loyalty | 1000.00 | 900.00 |\n| loyalty | 1000.01 | 850.01 |' },
+    { lane: 1, t: 'Prove red', h: 'acceptance-engineer: make it executable, prove red',
+      p: 'Here no new glue is needed because existing phrases are reused. It runs the scenarios and red_check.py, then opens the spec PR with the evidence.',
+      proof: '<b>red for the right reason</b>', cmd: "ONLY='@REQ-ORD-016' scripts/acceptance.sh\npython3 ci/red_check.py target/cucumber/report.json" },
+    { lane: 2, t: 'Spec PR gate', h: 'CI on the spec PR',
+      p: 'Path guard (kind=spec, added=REQ-ORD-016), contract lint, the new scenarios fail on a Then, and everything else is still green.',
+      proof: '<b>PR gate</b>, the only required check', cmd: 'gh pr checks "$SPEC_PR" --watch' },
+    { lane: 0, t: 'PO merges', h: 'PO reviews the rules, not code',
+      p: 'Do the Rule: lines match the issue? Are the boundary rows there? After the merge, REQ-ORD-016 is specified but pending, and main stays green.',
+      proof: 'human approval', cmd: 'gh pr merge "$SPEC_PR" --merge --delete-branch' },
+    { lane: 3, t: 'label agent:implement', h: 'Developer hands it to the implementer',
+      p: 'The implement job starts with ATDD_ROLE=implement. The spec and governance are now read-only for the agent.',
+      proof: 'workflow run', cmd: 'gh issue edit "$ISSUE" --add-label agent:implement' },
+    { lane: 1, t: 'Implement', h: 'implementer: red → green',
+      p: 'It reads the failures as its task, implements the rule in DiscountPolicy, updates the property test that pinned the old 10% rule, removes the pending ID and opens the impl PR.',
+      proof: 'local gates pass', cmd: "ONLY='@REQ-ORD-016' scripts/acceptance.sh   # loop until green\nmvn -B test && scripts/acceptance.sh" },
+    { lane: 2, t: 'Impl PR gate', h: 'CI on the implementation PR',
+      p: 'Path guard (kind=impl), unit + property + ArchUnit, whole spec green + holdout, PIT ≥ 80%, preview deploy orders-pr-<n>, spec over the network, Schemathesis.',
+      proof: '<b>PR gate</b>', cmd: 'gh pr checks "$IMPL_PR" --watch' },
+    { lane: 1, t: 'Conformance review', h: 'spec-conformance-reviewer (independent)',
+      p: 'A separate, read-only Claude reviews the PR: was the rule implemented, or just the example numbers? It posts its verdict as a PR comment.',
+      proof: 'PR comment', cmd: 'gh pr view "$IMPL_PR" --comments | tail -40' },
+    { lane: 3, t: 'Dev merges', h: 'Developer reviews design, not behaviour',
+      p: 'Behaviour is already proven by the spec, so the review covers readability and design. The preview app is deleted when the PR closes.',
+      proof: 'human approval', cmd: 'gh pr merge "$IMPL_PR" --merge --delete-branch' },
+    { lane: 2, t: 'Staging + k6', h: 'Main pipeline: build once, test on staging',
+      p: 'Build → spec embedded (+holdout) → image built ONCE → deploy staging → spec on staging + k6 SLO check (p95 thresholds from slo.json).',
+      proof: 'spec on staging + <b>SLO</b>', cmd: 'gh run watch "$MAIN_RUN"' },
+    { lane: 4, t: 'Approve', h: 'Release approver: production gate',
+      p: 'The GitHub production environment requires a reviewer. The same image that passed staging is promoted.',
+      proof: 'human approval', cmd: 'gh api -X POST repos/$REPO/actions/runs/$MAIN_RUN/pending_deployments \\\n  -F "environment_ids[]=$ENV_ID" -f state=approved' },
+    { lane: 4, t: 'Prod @smoke', h: 'Production: the same spec, again',
+      p: '@smoke scenarios run against production after the deploy, and then every 30 minutes as synthetic monitoring. The traceability table shows REQ → AC → ✅ per environment.',
+      proof: '<b>@smoke green in production</b>', cmd: "TAGS='@smoke' scripts/acceptance.sh remote \"$PROD_URL\"\npython3 ci/traceability.py target/cucumber/report.json production" },
+  ];
+  const fNodes = document.getElementById('flow-nodes');
+  let fStep = 0, fTimer = null;
+  const COLW = 1118 - 112, LANEH = 62;
+  FLOW.forEach((f, i) => {
+    const n = document.createElement('div');
+    n.className = 'fnode';
+    n.style.left = (40 + i * (COLW - 80) / (FLOW.length - 1)) + 'px';
+    n.style.top = (f.lane * LANEH + 8) + 'px';
+    n.textContent = f.t;
+    n.onclick = () => { stopPlay(); setFlow(i); };
+    fNodes.appendChild(n);
+  });
+  function drawFlow() {
+    const svg = document.getElementById('flow-svg');
+    const ns = [...fNodes.children];
+    let d = '';
+    for (let i = 1; i < ns.length; i++) {
+      const a = ns[i - 1], b = ns[i];
+      const x1 = a.offsetLeft + a.offsetWidth / 2, y1 = a.offsetTop + 23, x2 = b.offsetLeft + b.offsetWidth / 2, y2 = b.offsetTop + 23;
+      const mx = (x1 + x2) / 2;
+      d += `<path class="${i <= fStep ? 'done' : ''}" d="M${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}"/>`;
+    }
+    svg.innerHTML = d;
+  }
+  function setFlow(i) {
+    fStep = Math.max(0, Math.min(FLOW.length - 1, i));
+    [...fNodes.children].forEach((n, j) => { n.classList.toggle('done', j < fStep); n.classList.toggle('cur', j === fStep); });
+    const f = FLOW[fStep];
+    document.getElementById('flow-detail').innerHTML =
+      `<div class="fh"><span class="step">step ${String(fStep + 1).padStart(2, '0')}/${FLOW.length}</span><h3>${f.h}</h3></div>
+       <p>${f.p.replace(/<n>/g, '&lt;n&gt;')}</p><p class="proof">evidence: ${f.proof}</p>`;
+    document.getElementById('flow-cmd').textContent = '$ ' + f.cmd;
+    drawFlow();
+  }
+  function stopPlay() { clearInterval(fTimer); fTimer = null; document.getElementById('f-play').textContent = '▶ play'; }
+  document.getElementById('f-next').onclick = () => { stopPlay(); setFlow(fStep + 1); };
+  document.getElementById('f-prev').onclick = () => { stopPlay(); setFlow(fStep - 1); };
+  document.getElementById('f-reset').onclick = () => { stopPlay(); setFlow(0); };
+  document.getElementById('f-play').onclick = () => {
+    if (fTimer) return stopPlay();
+    if (fStep === FLOW.length - 1) setFlow(0);
+    document.getElementById('f-play').textContent = '❚❚ pause';
+    fTimer = setInterval(() => { if (fStep >= FLOW.length - 1) return stopPlay(); setFlow(fStep + 1); }, 2600);
+  };
+  setFlow(0);
+
+  /* ================= slide 12: guard rails ================= */
+  const ATTACKS = [
+    { a: 'Change the expected value in the .feature file to match my output',
+      by: 'PreToolUse hook + CI path guard', where: ['local', 'CI'],
+      p: 'In the implement role the Claude Code hook blocks every edit under specs/ and acceptance/ before it happens. If someone bypasses the hook, ci/guard.sh fails the PR.',
+      out: '[atdd-guard] Role \'implement\' may not modify specs/features/orders/discount.feature: the executable specification and delivery governance are read-only for implementers. If a scenario seems wrong, stop and explain it in the PR description instead.' },
+    { a: 'if (total == 1000.01) return 850.01;   // hardcode the examples',
+      by: 'Holdout scenarios + conformance reviewer', where: ['CI', 'review'],
+      p: 'Holdout scenarios with different values, which the agent never sees, run in the pipeline. The independent spec-conformance-reviewer checks for branches on specific amounts and other special-casing of test data.',
+      out: '# illustrative\n✗ holdout scenario: payable amount expected 2125.00 but was 2250.00\nconformance review: "branches on the example amounts, not the Rule: line"' },
+    { a: 'Add REQ-ORD-016 to pending-requirements.txt so the failing spec is skipped',
+      by: 'ci/guard.sh (pending-list rules)', where: ['CI'],
+      p: 'Only spec PRs may add lines, and they must prove red. Implementation PRs may only remove lines, and then the scenarios must pass. Nobody can quietly park a failing spec.',
+      out: 'Requirement IDs were added to delivery/pending-requirements.txt (REQ-ORD-016) outside a spec PR. Adding to the pending list is how a failing spec gets silently skipped, so only spec PRs may do it.' },
+    { a: 'Fix the spec and the code in the same PR, it\'s quicker',
+      by: 'ci/guard.sh (PR kind)', where: ['CI'],
+      p: 'A PR is either a spec PR or an implementation PR. Mixing them would let the author decide both "what is correct" and "what passes".',
+      out: 'This PR changes both the specification (specs/, acceptance/) and the implementation (src/). Split it into a spec PR and an implementation PR.' },
+    { a: 'Write unit tests that run the code but assert nothing',
+      by: 'Mutation testing (PIT ≥ 80%)', where: ['CI'],
+      p: 'PIT plants bugs (flips > to >=, changes constants, removes calls) and checks that a test fails. Coverage without assertions scores near zero.',
+      out: '# illustrative (pom.xml: mutationThreshold = 80)\n>> Generated 64 mutations Killed 41 (64%)\nMutation score of 64 is below threshold of 80' },
+    { a: 'Use Spring annotations inside the domain model, it\'s convenient',
+      by: 'ArchUnit architecture rules', where: ['local', 'CI'],
+      p: 'Architecture is a spec too: com.example.orders.domain must not depend on Spring or Jakarta, and the build fails if it does.',
+      out: '# illustrative\nArchitecture Violation: classes in ..domain.. should not depend on org.springframework..' },
+    { a: 'Make it pass locally only, the embedded app is enough',
+      by: 'Same spec on preview, staging and prod', where: ['preview', 'staging', 'prod'],
+      p: 'The drivers make the spec environment-agnostic. The same scenarios run against the PR preview over the network, then staging (+ k6), then @smoke in production every 30 minutes.',
+      out: 'scripts/acceptance.sh remote https://orders-pr-<n>…  ✓\nscripts/acceptance.sh remote https://orders-staging… ✓\n@smoke on production (synthetic, every 30 min)     ✓' },
+  ];
+  const atEl = document.getElementById('attacks');
+  ATTACKS.forEach((x, i) => {
+    const b = document.createElement('button');
+    b.className = 'attack'; b.textContent = x.a;
+    b.onclick = () => {
+      [...atEl.children].forEach(c => c.classList.toggle('on', c === b));
+      const c = document.getElementById('catch');
+      c.classList.remove('empty');
+      c.innerHTML = `<div class="verdict-big">BLOCKED</div><h3>Caught by: <span class="hl">${x.by}</span></h3>
+        <p>${x.p}</p><div class="where">${x.where.map(w => `<span class="chip lime">${w}</span>`).join('')}</div>
+        <pre class="code"></pre>`;
+      c.querySelector('pre').textContent = x.out;
+    };
+    atEl.appendChild(b);
+  });
+
+  /* ================= boot ================= */
+  fit();
+  const h = parseInt(location.hash.slice(1), 10);
+  go(Number.isFinite(h) ? h - 1 : 0);
+})();
+</script>
+</body>
+</html>
